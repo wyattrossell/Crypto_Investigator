@@ -1,0 +1,10 @@
+# Normalise text, protect binaries from line-ending conversion.
+* text=auto
+*.pdf binary
+*.png binary
+*.ico binary
+*.zip binary
+*.db binary
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+*.bat text eol=crlf
