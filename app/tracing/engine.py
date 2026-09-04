@@ -37,6 +37,7 @@ from app.providers.base import FetchMemo, ProviderError
 from app.providers.bitcoin import BitcoinProvider
 from app.providers.ethereum import EthereumProvider
 from app.providers.tron import TronProvider
+from app.tracing import cluster as clustering
 
 
 def _dust_threshold_for(asset: str, params: dict) -> float:
@@ -258,6 +259,12 @@ class ForwardTrace:
                 # (and becomes a finding); the address is still expanded -
                 # following a flagged wallet's money out is the point.
                 node["flags"].append("agency_flagged")
+            if any(label["category"] == config.LABEL_CATEGORY_SHARED_FLAG
+                   for label in node["labels"]):
+                # A PARTNER agency's designation (imported flag pack):
+                # marked and raised as a finding, kept distinct from the
+                # agency's own flags everywhere, still expanded.
+                node["flags"].append("shared_flagged")
             self.nodes[address] = node
         else:
             node["depth"] = min(node["depth"], depth)
@@ -538,6 +545,18 @@ class ForwardTrace:
                     f"address were ignored - money cannot flow backward "
                     f"in time, so those movements cannot contain the "
                     f"victim's funds.")
+
+        # Bitcoin address clustering (common-input-ownership heuristic)
+        # from the transactions already parsed - no extra pulls.
+        self.clusters = []
+        if self.chain == config.CHAIN_BITCOIN:
+            tx_inputs = getattr(self.provider, "tx_inputs", {})
+            self.clusters, cluster_notes = clustering.build_clusters(
+                tx_inputs, self.nodes)
+            self.warnings.extend(cluster_notes)
+            for entry in self.clusters:
+                for address in entry["traced_addresses"]:
+                    self.nodes[address]["cluster"] = entry["id"]
 
         self._stop_prefetch_pool()
         self.provider.close()
@@ -1118,6 +1137,29 @@ class ForwardTrace:
                 "from it.",
                 [address], entry)
 
+        # 2c) Contact with wallets flagged by a PARTNER agency (imported
+        #     flag pack) - always named as that agency's designation.
+        for node in self.nodes.values():
+            if "shared_flagged" not in node["flags"] or \
+                    node["role"] == config.ROLE_VICTIM:
+                continue
+            shared = [l for l in node["labels"]
+                      if l["category"] == config.LABEL_CATEGORY_SHARED_FLAG]
+            for label in shared[:3]:
+                add("shared_flag_contact", 2,
+                    "Traced funds reached a wallet flagged by a PARTNER "
+                    "agency",
+                    f"Address {node['address']} carries a shared "
+                    f"designation: {label['entity_name']} (imported flag "
+                    f"pack, source '{label['source']}'). This is the "
+                    f"OTHER agency's designation, not this agency's finding; "
+                    f"traced funds from THIS case reached it - a probable "
+                    f"link between agencies' cases.",
+                    "Contact the originating agency (its contact details "
+                    "are on the pack in the Flags dialog) to deconflict and "
+                    "share victim information. Verify before citing.",
+                    [node["address"]], terminal.get(node["address"]))
+
         # 4b) Contact with third-party-reported scam addresses.
         for node in self.nodes.values():
             scam = next((l for l in node["labels"]
@@ -1137,6 +1179,34 @@ class ForwardTrace:
                 "Consider flagging the wallet in this tool so future "
                 "cases hit it.",
                 [node["address"]], terminal.get(node["address"]))
+
+        # 4c) Address clusters (Bitcoin common-input heuristic): several
+        #     traced addresses presumed controlled by one party.
+        for entry in getattr(self, "clusters", []):
+            traced = entry["traced_addresses"]
+            if len(traced) < 2:
+                continue
+            if entry.get("service_label"):
+                title = (f"Cluster {entry['id']}: {len(traced)} traced "
+                         f"addresses belong to one service's wallet")
+                action = ("Treat the cluster as one custodian: a single "
+                          "legal request to the attributed service covers "
+                          "all of them.")
+            else:
+                title = (f"Cluster {entry['id']}: {len(traced)} traced "
+                         f"addresses presumed controlled by ONE party")
+                action = ("Request records for the whole cluster together; "
+                          "watch/flag all members, not just the one the "
+                          "funds touched. State the heuristic and its "
+                          "confidence in any affidavit.")
+            add("address_cluster", 5, title,
+                f"{entry['basis']} Members in this trace: "
+                + ", ".join(traced[:6])
+                + (f" (+{len(traced) - 6} more)" if len(traced) > 6 else "")
+                + f". Evidence: {entry['evidence_count']} transaction(s), "
+                f"e.g. {entry['evidence_txids'][0]}."
+                + f" Confidence: {entry['confidence'].upper()}.",
+                action, traced, None, {"cluster_id": entry["id"]})
 
         # 5) Sanctioned and mixer contacts.
         for node in self.nodes.values():
@@ -1331,6 +1401,7 @@ class ForwardTrace:
             "nodes": list(self.nodes.values()),
             "edges": self.edges,
             "exits": ranked_exits,
+            "clusters": getattr(self, "clusters", []),
             "warnings": self.warnings,
             "stats": {
                 "addresses": len(self.nodes),

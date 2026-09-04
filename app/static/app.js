@@ -167,6 +167,8 @@ function renderGettingStarted(meta) {
      "Hundreds of thousands of exchange and mixer addresses (GraphSense)."],
     ["scamsniffer" in fresh, "Scam blacklist downloaded",
      "Reported drainer and phishing addresses (ScamSniffer)."],
+    ["eth_labels" in fresh, "Ethereum name tags downloaded",
+     "Etherscan public tags via eth-labels: exchanges, exploiters, protocols."],
     [!!meta.letterhead_configured, "Agency letterhead filled in",
      "Used on DRAFT freeze / preservation request letters."],
   ];
@@ -326,6 +328,7 @@ function renderFlagsList() {
 }
 
 async function openFlags() {
+  refreshPacks();
   await refreshFlags();
   renderFlagsList();
   $("flag-add-status").textContent = "";
@@ -761,6 +764,7 @@ function renderResults(traceId, result, traceRow) {
   renderDisposition(result);
   renderFindings(result);
   renderExits(result);
+  renderClusters(result);
   renderWarnings(result);
   renderGraph(result);
 
@@ -791,6 +795,7 @@ function renderResults(traceId, result, traceRow) {
 const FINDING_ICONS = {
   named_exchange: "🏛", funds_at_rest: "💰",
   flagged_wallet_contact: "🚩", scam_reported_contact: "⚠️",
+  shared_flag_contact: "🤝", address_cluster: "🧩",
   probable_exchange_deposit: "🎯", unidentified_service: "🏢",
   consolidation_point: "🔗", sanctioned_contact: "⛔",
   mixer_contact: "🌀", unresolved_edges: "⋯",
@@ -1098,6 +1103,42 @@ function renderExits(result) {
   });
 }
 
+function renderClusters(result) {
+  const container = $("clusters");
+  container.innerHTML = "";
+  const clusters = (result.clusters || []).filter(
+    (c) => (c.traced_addresses || []).length >= 2);
+  if (!clusters.length) return;
+  const heading = document.createElement("h2");
+  heading.textContent = `Address clusters (${clusters.length}) — heuristic`;
+  container.append(heading);
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = "Common-input-ownership: all inputs of one Bitcoin " +
+    "transaction are presumed controlled by one party. CoinJoin-like " +
+    "transactions are excluded. These are inferences with the evidence " +
+    "shown, never facts, and a cluster does not identify a person.";
+  container.append(note);
+  for (const c of clusters) {
+    const card = document.createElement("div");
+    card.className = `cluster-card ${c.confidence}`;
+    const members = c.traced_addresses.slice(0, 8).map((a) =>
+      `<code>${shortAddress(a)}</code>`).join(" ");
+    const more = c.traced_addresses.length > 8
+      ? ` <span class="muted">+${c.traced_addresses.length - 8} more</span>` : "";
+    card.innerHTML = `<b>${c.id}</b> · ${c.traced_addresses.length} traced
+      of ${c.size} addresses · confidence <b>${c.confidence.toUpperCase()}</b>
+      ${c.service_label ? ` · <span class="pill green">service: ${
+        c.service_label}</span>` : ""}
+      <div style="margin:4px 0">${members}${more}</div>
+      <div class="muted">${c.basis}</div>
+      <div class="muted">Evidence: ${c.evidence_count} transaction(s) —
+        ${c.evidence_txids.slice(0, 2).map((t) => `<code>${t.slice(0, 16)}…</code>`)
+          .join(" ")}</div>`;
+    container.append(card);
+  }
+}
+
 function renderWarnings(result) {
   const container = $("warnings");
   container.innerHTML = "";
@@ -1377,6 +1418,13 @@ function displayRole(d) {
   return d.node ? d.node.role : "victim";
 }
 
+function displayShared(d) {
+  const has = (node) => (node.flags || []).includes("shared_flagged");
+  if (d.kind === "entity") return d.members.some((m) => m.node && has(m.node));
+  if (d.kind === "address" && d.node) return has(d.node);
+  return false;
+}
+
 function displayFlagged(d) {
   if (d.kind === "entity") {
     return d.members.some((m) => flagFor(m.chain, m.address));
@@ -1416,6 +1464,7 @@ function redrawGraph() {
     elements.push({ data: { id, label: displayLabel(d),
                             role: displayRole(d), kind: d.kind, d,
                             flagged: displayFlagged(d) ? 1 : 0,
+                            shared: displayShared(d) ? 1 : 0,
                             converged: displayConverged(d) ? 1 : 0 },
                     position: pos.get(id) });
   }
@@ -1469,6 +1518,9 @@ function redrawGraph() {
       }},
       { selector: "node[flagged = 1]", style: {
         "border-color": "#c22525", "border-width": 4,
+      }},
+      { selector: "node[shared = 1]", style: {
+        "border-color": "#d97a06", "border-width": 4, "border-style": "dashed",
       }},
       { selector: "node[converged = 1]", style: {
         "border-color": "#d97a06", "border-width": 5,
@@ -1551,6 +1603,12 @@ function showAddressDetails(node) {
        target="_blank">Chainabuse scam reports</a>
     <span class="muted">(opens external sites — free public databases of
     reported scam addresses)</span>
+    ${node.cluster ? `<b>Cluster:</b> ${node.cluster} (common-input
+      heuristic — see the clusters section)<br>` : ""}
+    ${(node.labels || []).filter((l) => l.category === "shared_flag")
+      .map((l) => `<div class="shared-info">🤝 ${l.entity_name} — a PARTNER
+        agency's designation (imported pack), not this agency's own.</div>`)
+      .join("")}
     ${flag ? `<div class="flag-info">🚩 Flagged by this agency${
       flag.case_name ? ` in case “${flag.case_name}”` : ""}${
       flag.created_utc ? ` on ${flag.created_utc.slice(0, 10)}` : ""}${
@@ -1572,7 +1630,17 @@ suspect-controlled">${note}</textarea>
       <button id="btn-save-annotation" class="secondary small">Save
         note</button>
       <span id="annotation-status" class="muted"></span>
-    </div>`;
+    </div>
+    <div class="panel-actions">
+      <button id="btn-chainabuse" class="secondary small">⚠️ Check
+        Chainabuse reports</button>
+      <button id="btn-wallet-summary" class="secondary small">📝 Plain-language
+        summary</button>
+      <span id="intel-status" class="muted"></span>
+    </div>
+    <div id="intel-chainabuse" class="intel-box hidden"></div>
+    <div id="intel-summary" class="intel-box hidden"></div>`;
+  wireIntelButtons(node);
   $("btn-toggle-flag").addEventListener("click", async () => {
     try {
       if (flag) {
@@ -1621,6 +1689,315 @@ suspect-controlled">${note}</textarea>
       $("annotation-status").textContent = `Failed: ${error.message}`;
     }
   });
+}
+
+/* ===================== wallet intelligence (address panel) ============ */
+
+function renderChainabuse(box, data) {
+  box.classList.remove("hidden");
+  const b = data.budget || {};
+  const budget = b.monthly_budget !== null && b.monthly_budget !== undefined
+    ? `${b.calls_remaining} of ${b.monthly_budget} free lookups left this
+       month` : `partner tier · ${b.calls_used} calls this month`;
+  const when = (data.fetched_utc || "").slice(0, 16).replace("T", " ");
+  const cats = Object.entries(data.categories || {})
+    .map(([k, v]) => `<span class="pill orange">${k} ×${v}</span>`).join("");
+  const reports = (data.reports || []).slice(0, 10).map((r) => `
+    <div class="report-item">
+      <b>${r.category || "Unspecified"}</b>
+      <span class="muted">· ${(r.created_at || "").slice(0, 10)}
+        ${r.checked ? "· moderator-checked" : ""}${r.trusted ? "· trusted contributor" : ""}
+        ${r.is_private ? "· private (partner data)" : ""}</span>
+      ${r.losses && r.losses.length ? `<span class="muted">· reported loss ${
+        r.losses.map((l) => `${l.amount} ${l.asset}`).join(", ")}</span>` : ""}
+      <div>${(r.description || "").slice(0, 400)}${
+        (r.description || "").length > 400 ? "…" : ""}</div>
+      ${r.address_count > 1 ? `<span class="muted">${r.address_count}
+        addresses in this report</span>` : ""}
+    </div>`).join("");
+  box.innerHTML = `<h4>Chainabuse public reports: ${data.report_count}
+      ${data.from_cache ? `<span class="muted">(stored answer from ${when} UTC)</span>`
+                        : `<span class="muted">(fetched ${when} UTC)</span>`}</h4>
+    ${cats}
+    ${data.report_count ? reports
+      : "<p>No public reports for this address at the time of lookup.</p>"}
+    <p class="muted">${data.source_note || ""} ${budget}.
+      <a href="https://www.chainabuse.com/address/${data.address}"
+         target="_blank">Open on chainabuse.com</a>
+      · <a href="#" data-chainabuse-refresh>Refresh (spends a lookup)</a></p>`;
+}
+
+function wireIntelButtons(node) {
+  const status = $("intel-status");
+  const caBox = $("intel-chainabuse");
+  const sumBox = $("intel-summary");
+  // Show a stored Chainabuse answer immediately, if any.
+  api(`/api/intel/chainabuse/cached?address=${encodeURIComponent(node.address)}`
+      + `&chain=${node.chain}`)
+    .then((data) => renderChainabuse(caBox, data))
+    .catch(() => {});
+  const lookup = async (force) => {
+    status.textContent = "Looking up Chainabuse…";
+    $("btn-chainabuse").disabled = true;
+    try {
+      const data = await api("/api/intel/chainabuse/lookup", {
+        method: "POST",
+        body: JSON.stringify({ address: node.address, chain: node.chain,
+                               force }),
+      });
+      renderChainabuse(caBox, data);
+      status.textContent = "";
+      refreshMeta();
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      $("btn-chainabuse").disabled = false;
+    }
+  };
+  $("btn-chainabuse").addEventListener("click", () => lookup(false));
+  caBox.addEventListener("click", (ev) => {
+    if (ev.target.matches("[data-chainabuse-refresh]")) {
+      ev.preventDefault();
+      if (confirm("Refresh spends one Chainabuse lookup. Continue?")) lookup(true);
+    }
+  });
+  $("btn-wallet-summary").addEventListener("click", async () => {
+    status.textContent = "Building summary…";
+    $("btn-wallet-summary").disabled = true;
+    try {
+      const data = await api(`/api/intel/summary?address=${
+        encodeURIComponent(node.address)}&chain=${node.chain}` +
+        (currentTraceId ? `&trace_id=${currentTraceId}` : ""));
+      sumBox.classList.remove("hidden");
+      sumBox.innerHTML = `<h4>Plain-language summary</h4>` +
+        data.paragraphs.map((t) => `<p>${t}</p>`).join("") +
+        `<p class="muted">${data.note}</p>
+         <div class="panel-actions"><button class="secondary small"
+           id="btn-copy-summary">Copy summary</button></div>`;
+      $("btn-copy-summary").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(data.paragraphs.join("\n\n"));
+          $("btn-copy-summary").textContent = "Copied ✓";
+        } catch (_) { $("btn-copy-summary").textContent = "Copy failed"; }
+      });
+      status.textContent = "";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      $("btn-wallet-summary").disabled = false;
+    }
+  });
+}
+
+/* ===================== flag packs ===================== */
+
+async function refreshPacks() {
+  const container = $("packs-list");
+  let packs = [];
+  try { packs = await api("/api/flags/packs"); } catch (_) {}
+  if (!packs.length) {
+    container.innerHTML = "<p class='muted'>No partner packs imported.</p>";
+    return;
+  }
+  container.innerHTML = packs.map((p) => `
+    <div class="pack-row">
+      <div><b>${p.agency}</b> <span class="muted">· ${p.count} wallets ·
+        exported ${(p.exported_utc || "?").slice(0, 10)} · imported
+        ${(p.imported_utc || "").slice(0, 10)}${p.contact
+          ? ` · contact: ${p.contact}` : ""}</span>
+        <div class="muted">SHA-256 ${p.sha256.slice(0, 16)}… — source key
+          <code>${p.source}</code></div></div>
+      <button class="secondary small" data-remove-pack="${p.id}">Remove</button>
+    </div>`).join("");
+  container.querySelectorAll("[data-remove-pack]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      if (!confirm("Remove this partner pack and its labels?")) return;
+      await api(`/api/flags/packs/${btn.dataset.removePack}`,
+                { method: "DELETE" });
+      refreshPacks();
+      refreshMeta();
+    }));
+}
+
+async function importPackFile(file) {
+  const status = $("pack-status");
+  status.textContent = "Verifying…";
+  try {
+    const text = await file.text();
+    let payload;
+    try { payload = JSON.parse(text); }
+    catch (_) { throw new Error("That file is not JSON."); }
+    const result = await api("/api/flags/packs/import", {
+      method: "POST", body: JSON.stringify(payload),
+    });
+    status.textContent = `Imported ${result.imported} wallets from ${
+      result.agency}${result.replaced_previous ? " (replaced the earlier pack)" : ""}.`;
+    refreshPacks();
+    refreshMeta();
+    if (cy) redrawGraph();
+  } catch (error) {
+    status.textContent = `Import failed: ${error.message}`;
+  }
+}
+
+/* ===================== bulk triage ===================== */
+
+let triageRunId = null;
+let triagePollTimer = null;
+
+function pillsFor(row) {
+  const pills = [];
+  if (row.flag) pills.push(`<span class="pill red" title="${row.flag.reason || ""}">agency flag</span>`);
+  for (const f of row.shared_flags || []) pills.push(
+    `<span class="pill orange" title="${f}">partner flag</span>`);
+  for (const src of row.scam_lists || []) pills.push(
+    `<span class="pill orange">scam list: ${src}</span>`);
+  if (row.chainabuse && row.chainabuse.report_count) pills.push(
+    `<span class="pill orange">Chainabuse ×${row.chainabuse.report_count}</span>`);
+  if (row.attribution_category === "exchange") pills.push(
+    `<span class="pill green">exchange</span>`);
+  if (row.attribution_category === "mixer") pills.push(
+    `<span class="pill red">mixer</span>`);
+  if (row.attribution_category === "sanctioned") pills.push(
+    `<span class="pill red">OFAC</span>`);
+  if (row.watched) pills.push(`<span class="pill blue">watched</span>`);
+  return pills.join("");
+}
+
+function renderTriage(run) {
+  const result = run.result || {};
+  const s = result.summary || {};
+  $("triage-summary").innerHTML = `<p class="muted">${s.total} addresses ·
+    ${s.attributed} attributed · ${s.flagged} agency-flagged ·
+    ${s.shared_flagged} partner-flagged · ${s.scam_listed} on scam lists ·
+    ${s.chainabuse_hits} with Chainabuse reports · ${s.unrecognised}
+    unrecognised</p>`;
+  const rows = (result.rows || []).map((r) => {
+    const act = r.activity
+      ? `${r.activity.tx_count ?? "?"} tx · ${fmtAmount(r.activity.balance)} ${r.activity.unit}`
+      : (r.activity_error ? `<span class="muted">${r.activity_error.slice(0, 40)}</span>` : "");
+    const actions = r.kind === "address" && r.chain ? `
+      <button class="secondary small" data-triage-trace="${r.chain}|${r.address}"
+        title="Fill the trace form with this address">Trace</button>
+      ${!r.flag ? `<button class="secondary small" data-triage-flag="${r.chain}|${r.address}">Flag</button>` : ""}
+      ${!r.watched ? `<button class="secondary small" data-triage-watch="${r.chain}|${r.address}">Watch</button>` : ""}` : "";
+    return `<tr>
+      <td><code>${r.address}</code>${r.kind !== "address"
+        ? `<div class="muted">${r.detect_message}</div>` : ""}</td>
+      <td>${r.chain || "—"}</td>
+      <td>${r.attribution ? `${r.attribution}<div class="muted">${
+        r.attribution_confidence} confidence</div>` : "<span class='muted'>no label</span>"}</td>
+      <td>${pillsFor(r) || "—"}</td>
+      <td>${act}</td>
+      <td class="panel-actions">${actions}</td></tr>`;
+  }).join("");
+  $("triage-results").innerHTML = `<table class="panel-table">
+    <tr><th>Address</th><th>Chain</th><th>Attribution</th><th>Designations</th>
+        <th>Activity</th><th></th></tr>${rows}</table>`;
+  $("btn-triage-csv").href = `/api/intel/triage/${run.id}/export.csv`;
+  $("btn-triage-csv").classList.remove("hidden");
+  const container = $("triage-results");
+  container.querySelectorAll("[data-triage-trace]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const [chain, address] = btn.dataset.triageTrace.split("|");
+      $("chain-select").value = chain;
+      $("victim-input").value = address;
+      $("focus-tx-input").value = "";
+      $("triage-dialog").close();
+      $("victim-input").dispatchEvent(new Event("input"));
+      $("victim-input").scrollIntoView({ behavior: "smooth" });
+    }));
+  container.querySelectorAll("[data-triage-flag]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const [chain, address] = btn.dataset.triageFlag.split("|");
+      const reason = prompt("Reason for flagging:", "");
+      if (reason === null) return;
+      await addFlag(address, chain, reason.trim(),
+                    Number($("case-select").value) || null);
+      btn.textContent = "Flagged ✓"; btn.disabled = true;
+    }));
+  container.querySelectorAll("[data-triage-watch]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const [chain, address] = btn.dataset.triageWatch.split("|");
+      await addWatch(address, chain, "Added from bulk triage",
+                     Number($("case-select").value) || null);
+      btn.textContent = "Watching ✓"; btn.disabled = true;
+    }));
+}
+
+async function loadTriageRun(runId) {
+  clearInterval(triagePollTimer);
+  triageRunId = runId;
+  const poll = async () => {
+    const run = await api(`/api/intel/triage/${runId}`);
+    if (run.status === "running") {
+      $("triage-status").textContent = `Working… ${run.progress_note || ""}`;
+      return;
+    }
+    clearInterval(triagePollTimer);
+    $("btn-triage-run").disabled = false;
+    if (run.status === "failed") {
+      $("triage-status").textContent = `Failed: ${run.error}`;
+      return;
+    }
+    $("triage-status").textContent = `Finished (run #${run.id}).`;
+    renderTriage(run);
+    refreshTriageHistory();
+  };
+  await poll();
+  triagePollTimer = setInterval(poll, 1500);
+}
+
+async function refreshTriageHistory() {
+  let runs = [];
+  try { runs = await api("/api/intel/triage"); } catch (_) {}
+  const container = $("triage-history");
+  if (!runs.length) {
+    container.innerHTML = "<p class='muted'>No previous runs.</p>";
+    return;
+  }
+  container.innerHTML = runs.map((r) => `
+    <div class="history-row ${r.status}">
+      <div>#${r.id} <span class="muted">${(r.created_utc || "").replace("T", " ")
+        .slice(0, 16)} UTC · ${r.params.count} addresses${r.params.fetch_activity
+        ? " · with activity" : ""}${r.case_name ? ` · case ${r.case_name}` : ""}
+        · ${r.status}</span></div>
+      <div>${r.status === "finished"
+        ? `<button class="secondary small" data-open-triage="${r.id}">Open</button>` : ""}</div>
+    </div>`).join("");
+  container.querySelectorAll("[data-open-triage]").forEach((btn) =>
+    btn.addEventListener("click", () => loadTriageRun(Number(btn.dataset.openTriage))));
+}
+
+async function runTriage() {
+  const lines = $("triage-input").value.split(/[\s,;]+/).filter(Boolean);
+  if (!lines.length) { alert("Paste at least one address."); return; }
+  $("btn-triage-run").disabled = true;
+  $("triage-status").textContent = "Starting…";
+  $("triage-results").innerHTML = "";
+  $("triage-summary").innerHTML = "";
+  $("btn-triage-csv").classList.add("hidden");
+  try {
+    const { run_id } = await api("/api/intel/triage", {
+      method: "POST",
+      body: JSON.stringify({
+        addresses: lines,
+        chain: $("triage-chain").value,
+        fetch_activity: $("triage-activity").checked,
+        case_id: $("triage-link-case").checked
+          ? (Number($("case-select").value) || null) : null,
+      }),
+    });
+    loadTriageRun(run_id);
+  } catch (error) {
+    $("triage-status").textContent = `Could not start: ${error.message}`;
+    $("btn-triage-run").disabled = false;
+  }
+}
+
+async function openTriage() {
+  refreshTriageHistory();
+  $("triage-dialog").showModal();
 }
 
 function showDisplayNodeDetails(d) {
@@ -2314,6 +2691,17 @@ async function openSettings() {
   $("trongrid-key-state").textContent = settings.trongrid_api_key_masked
     ? `Current key: ${settings.trongrid_api_key_masked}`
     : "No key yet — Tron tracing works without one but is rate-limited.";
+  $("setting-chainabuse-key").value = "";
+  $("chainabuse-key-state").textContent = settings.chainabuse_api_key_masked
+    ? `Current key: ${settings.chainabuse_api_key_masked}`
+    : "No key yet — lookups are unavailable until one is added.";
+  $("setting-chainabuse-tier").value = settings.chainabuse_tier || "free";
+  const cs = settings.chainabuse_status || {};
+  $("chainabuse-usage").textContent = cs.configured
+    ? (cs.monthly_budget !== null && cs.monthly_budget !== undefined
+        ? `${cs.calls_used} of ${cs.monthly_budget} lookups used in ${cs.period}; ${cs.cached_addresses} addresses cached`
+        : `${cs.calls_used} lookups this month; ${cs.cached_addresses} addresses cached`)
+    : "";
   $("setting-btc-base").value = settings.bitcoin_api_base;
   $("setting-eth-base").value = settings.etherscan_api_base;
   $("setting-ethereum-mode").value = settings.ethereum_api_mode || "auto";
@@ -2340,6 +2728,7 @@ async function openSettings() {
   $("ofac-status").textContent = freshText("ofac_sdn");
   $("tagpacks-status").textContent = freshText("graphsense_tagpack");
   $("scamsniffer-status").textContent = freshText("scamsniffer");
+  $("eth-labels-status").textContent = freshText("eth_labels");
   $("setting-data-dir").textContent = (lastMeta || {}).data_dir || "";
   $("settings-dialog").showModal();
 }
@@ -2362,6 +2751,9 @@ async function saveSettings() {
   if (geckoKey) body.coingecko_api_key = geckoKey;
   const tronKey = $("setting-trongrid-key").value.trim();
   if (tronKey) body.trongrid_api_key = tronKey;
+  const caKey = $("setting-chainabuse-key").value.trim();
+  if (caKey) body.chainabuse_api_key = caKey;
+  body.chainabuse_tier = $("setting-chainabuse-tier").value;
   body.ai_provider = $("setting-ai-provider").value;
   body.ai_model = $("setting-ai-model").value;
   body.ai_base_url = $("setting-ai-base").value;
@@ -2602,6 +2994,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Flagged wallets dialog
   $("btn-flags").addEventListener("click", openFlags);
+  $("btn-pack-import").addEventListener("click",
+    () => $("pack-import-file").click());
+  $("pack-import-file").addEventListener("change", () => {
+    const file = $("pack-import-file").files[0];
+    if (file) importPackFile(file);
+    $("pack-import-file").value = "";
+  });
+  $("btn-triage").addEventListener("click", openTriage);
+  $("btn-triage-close").addEventListener("click",
+    () => { clearInterval(triagePollTimer); $("triage-dialog").close(); });
+  $("btn-triage-run").addEventListener("click", runTriage);
   $("btn-flags-close").addEventListener("click",
     () => $("flags-dialog").close());
   $("btn-flag-add").addEventListener("click", async () => {
@@ -2630,6 +3033,11 @@ document.addEventListener("DOMContentLoaded", () => {
     (s) => `Loaded ${s.labels.toLocaleString()} labels from ${s.packs} ` +
       `pack(s)` + (s.skipped_packs.length
         ? ` (${s.skipped_packs.length} pack(s) skipped)` : "") + ".");
+  wireLabelRefresh("btn-refresh-eth-labels", "eth-labels-status",
+    "/api/labels/refresh-eth-labels",
+    (r) => `Imported ${r.labels.toLocaleString()} Ethereum tags: ` +
+      `${r.exchange} exchange, ${r.mixer} mixer, ${r.scam_report} ` +
+      `phishing/hack, ${r.other} informational.`);
   wireLabelRefresh("btn-refresh-scamsniffer", "scamsniffer-status",
     "/api/labels/refresh-scamsniffer",
     (s) => `Loaded ${s.addresses.toLocaleString()} reported scam addresses.`);

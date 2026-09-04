@@ -17,6 +17,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import assistant, config, database, ic3, prices, scheduler
+from app.intel import chainabuse, summary as wallet_summary, triage
+from app.labels import packs as flag_packs
 from app.labels import store as label_store
 from app.report import casefiles, freeze_letter, ic3_worksheet, pdf_report
 from app.tracing import detect
@@ -51,6 +53,7 @@ def startup() -> None:
     database.initialise_database()
     label_store.load_seed_labels()
     orphaned = database.fail_orphaned_traces()
+    database.fail_orphaned_triage_runs()
     if orphaned:
         log.warning("%d trace(s) interrupted by a previous shutdown were "
                     "marked failed", orphaned)
@@ -92,6 +95,8 @@ class SettingsUpdate(BaseModel):
     etherscan_api_key: str | None = None
     coingecko_api_key: str | None = None
     trongrid_api_key: str | None = None
+    chainabuse_api_key: str | None = None
+    chainabuse_tier: str | None = None         # free | partner
     bitcoin_api_base: str | None = None
     etherscan_api_base: str | None = None
     ethereum_api_mode: str | None = None       # auto | etherscan | blockscout
@@ -118,7 +123,7 @@ class SettingsUpdate(BaseModel):
 # encrypted at rest).
 PLAIN_SETTING_KEYS = (
     "bitcoin_api_base", "etherscan_api_base", "ethereum_api_mode",
-    "watch_interval_minutes", "labels_autorefresh",
+    "watch_interval_minutes", "labels_autorefresh", "chainabuse_tier",
     "ai_provider", "ai_model", "ai_base_url", "ai_workspace_id",
     "agency_name", "agency_unit", "agency_address", "agency_phone",
     "officer_name", "officer_title", "officer_badge", "officer_email",
@@ -188,6 +193,10 @@ def get_settings():
             masked(database.get_setting("coingecko_api_key")),
         "trongrid_api_key_masked":
             masked(database.get_setting("trongrid_api_key")),
+        "chainabuse_api_key_masked":
+            masked(database.get_setting("chainabuse_api_key")),
+        "chainabuse_tier": database.get_setting("chainabuse_tier", "free"),
+        "chainabuse_status": chainabuse.status(),
         "ai_api_key_masked":
             masked(database.get_setting("ai_api_key")),
         "ai_provider": database.get_setting("ai_provider", ""),
@@ -219,9 +228,13 @@ def update_settings(body: SettingsUpdate):
         raise HTTPException(status_code=400,
                             detail="Unknown AI provider - choose "
                                    "anthropic, openai, or custom.")
+    if body.chainabuse_tier is not None and body.chainabuse_tier.strip() \
+            and body.chainabuse_tier.strip() not in config.CHAINABUSE_TIERS:
+        raise HTTPException(status_code=400,
+                            detail="Chainabuse tier must be free or partner.")
     for field_name in ("etherscan_api_key", "coingecko_api_key",
-                       "trongrid_api_key", "ai_api_key") \
-            + PLAIN_SETTING_KEYS:
+                       "trongrid_api_key", "ai_api_key",
+                       "chainabuse_api_key") + PLAIN_SETTING_KEYS:
         value = getattr(body, field_name)
         if value is not None:
             database.set_setting(field_name, value.strip())
@@ -259,6 +272,168 @@ def refresh_scamsniffer():
         raise HTTPException(status_code=502,
                             detail=f"ScamSniffer refresh failed: {exc}")
     return summary
+
+
+@app.post("/api/labels/refresh-eth-labels")
+def refresh_eth_labels():
+    """Download + import eth-labels (Etherscan public name tags, MIT)."""
+    try:
+        summary = label_store.refresh_eth_labels()
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"eth-labels refresh failed: {exc}")
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Flag packs (sharing designations between agencies as files)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/flags/pack.json")
+def flags_pack_export():
+    """This agency's flags as a shareable pack (no case names/numbers)."""
+    agency = {k: database.get_setting(k) for k in AGENCY_SETTING_KEYS}
+    pack = flag_packs.build_pack(agency)
+    slug = "".join(ch if ch.isalnum() else "-"
+                   for ch in (agency.get("agency_name") or "agency").lower())
+    filename = f"flag-pack_{slug.strip('-') or 'agency'}_" \
+               f"{pack['exported_utc'][:10]}.json"
+    return Response(content=json.dumps(pack, indent=2, ensure_ascii=False),
+                    media_type="application/json",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{filename}"'})
+
+
+@app.get("/api/flags/packs")
+def flags_packs_list():
+    return flag_packs.list_packs()
+
+
+@app.post("/api/flags/packs/import")
+def flags_pack_import(body: dict):
+    """Verify + import a pack another agency exported. The body is the
+    pack file's JSON."""
+    try:
+        return flag_packs.import_pack(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/flags/packs/{pack_id}")
+def flags_pack_delete(pack_id: int):
+    if not flag_packs.remove_pack(pack_id):
+        raise HTTPException(status_code=404, detail="Pack not found.")
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Wallet intelligence: Chainabuse, summaries, bulk triage
+# ---------------------------------------------------------------------------
+
+class IntelLookup(BaseModel):
+    address: str = Field(min_length=8)
+    chain: str
+    force: bool = False
+
+
+@app.get("/api/intel/chainabuse/status")
+def chainabuse_status():
+    return chainabuse.status()
+
+
+@app.post("/api/intel/chainabuse/lookup")
+def chainabuse_lookup(body: IntelLookup):
+    """On-demand Chainabuse report lookup (cached; budgeted)."""
+    chain = body.chain.strip().lower()
+    try:
+        return chainabuse.lookup(body.address.strip(), chain, body.force)
+    except chainabuse.NotConfigured as exc:
+        raise HTTPException(status_code=428, detail=str(exc))
+    except chainabuse.BudgetError as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"Chainabuse lookup failed: {exc}")
+
+
+@app.get("/api/intel/chainabuse/cached")
+def chainabuse_cached(address: str, chain: str):
+    cached = chainabuse.cached(address.strip(), chain.strip().lower())
+    if cached is None:
+        raise HTTPException(status_code=404, detail="No cached lookup.")
+    return cached
+
+
+@app.get("/api/intel/summary")
+def intel_summary(address: str, chain: str, trace_id: int | None = None,
+                  activity: bool = True):
+    """Plain-language wallet summary (no AI; facts included)."""
+    chain = chain.strip().lower()
+    if chain not in config.SUPPORTED_CHAINS:
+        raise HTTPException(status_code=400, detail="Unsupported chain.")
+    result = None
+    if trace_id is not None:
+        trace = database.get_trace(trace_id)
+        if trace and trace.get("result_json"):
+            result = json.loads(trace["result_json"])
+    try:
+        return wallet_summary.wallet_summary(chain, address.strip(), result,
+                                             fetch_activity=activity)
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"Summary failed: {exc}")
+
+
+class TriageCreate(BaseModel):
+    addresses: list[str]
+    chain: str = "auto"          # auto | bitcoin | ethereum | tron | litecoin
+    case_id: int | None = None
+    fetch_activity: bool = False
+
+
+@app.post("/api/intel/triage")
+def triage_create(body: TriageCreate):
+    if body.case_id is not None and database.get_case(body.case_id) is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    chain = (body.chain or "auto").strip().lower()
+    if chain != "auto" and chain not in config.SUPPORTED_CHAINS + \
+            (config.CHAIN_LITECOIN,):
+        raise HTTPException(status_code=400, detail="Unknown chain.")
+    try:
+        run_id = triage.start(body.case_id, body.addresses, chain,
+                              body.fetch_activity)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"run_id": run_id}
+
+
+@app.get("/api/intel/triage")
+def triage_list():
+    rows = database.triage_list()
+    for row in rows:
+        row["params"] = json.loads(row.pop("params_json") or "{}")
+    return rows
+
+
+@app.get("/api/intel/triage/{run_id}")
+def triage_get(run_id: int):
+    row = database.triage_get(run_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Triage run not found.")
+    row["params"] = json.loads(row.pop("params_json") or "{}")
+    row["result"] = json.loads(row.pop("result_json") or "null")
+    return row
+
+
+@app.get("/api/intel/triage/{run_id}/export.csv")
+def triage_csv(run_id: int):
+    row = database.triage_get(run_id)
+    if row is None or not row.get("result_json"):
+        raise HTTPException(status_code=404, detail="No finished triage run.")
+    text = triage.result_csv(json.loads(row["result_json"]))
+    return Response(content=text, media_type="text/csv",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="triage_{run_id}.csv"'})
 
 
 # ---------------------------------------------------------------------------

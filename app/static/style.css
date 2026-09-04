@@ -414,7 +414,47 @@ main { display: grid; grid-template-columns: var(--sidebar-w) 1fr;
 .dot.unexpanded { background: var(--unexpanded); }
 .dot.flagged { background: var(--surface); border: 2px solid var(--sanctioned);
   width: 8px; height: 8px; }
+.dot.shared { background: var(--surface); border: 2px dashed var(--high);
+  width: 8px; height: 8px; }
 .legend-note { font-family: var(--mono); }
+#clusters:not(:empty) {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.cluster-card {
+  border: 1px solid var(--line); border-left: 5px solid var(--contract);
+  border-radius: var(--radius-sm); padding: 10px 14px; margin: 8px 0;
+  background: var(--surface-2); font-size: 13px;
+}
+.cluster-card.low { border-left-color: var(--unexpanded); }
+.intel-box {
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface); font-size: 13px;
+}
+.intel-box h4 { margin: 0 0 6px; font-size: 13px; }
+.intel-box p { margin: 0 0 6px; color: var(--ink-2); }
+.report-item { border-top: 1px solid var(--line); padding: 6px 0; }
+.shared-info {
+  margin-top: 8px; color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+  border-radius: var(--radius-sm); padding: 6px 9px; font-size: 12.5px;
+}
+#triage-dialog { width: 1100px; }
+#triage-results .panel-table td { font-size: 12px; }
+#triage-results code { font-size: 11px; }
+.pack-row { display: flex; justify-content: space-between; gap: 10px;
+  align-items: center; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-2);
+  margin: 6px 0; font-size: 13px; }
+.pill { display: inline-block; font-size: 11px; font-weight: 600;
+  border-radius: 999px; padding: 1px 7px; margin-right: 3px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); }
+.pill.red { color: var(--danger); border-color: var(--danger); }
+.pill.orange { color: var(--warn); border-color: var(--warn); }
+.pill.green { color: var(--success); border-color: var(--success); }
+.pill.blue { color: var(--accent); border-color: var(--accent); }
 #graph-controls {
   display: flex; justify-content: space-between; align-items: center;
   flex-wrap: wrap; gap: 8px; margin: 10px 0 8px;

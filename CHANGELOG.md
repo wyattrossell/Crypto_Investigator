@@ -5,6 +5,93 @@ changes, dependencies, and known limitations, per the project's iteration
 directives. The complete program listing for each version is generated at
 `docs/listings/v{version}-full-listing.txt`.
 
+## v0.13.0 — 2026-09-04 (Wallet intelligence: Chainabuse, flag packs, eth-labels, clustering, summaries, bulk triage)
+
+### Functionality
+- **Chainabuse scam-report lookups (on demand).** "Check Chainabuse
+  reports" on any address panel queries the Chainabuse public API
+  (TRM Labs; verified 2026-09-04: `GET /v0/reports?address=`, Basic auth
+  with the key as username). Answers are cached for 30 days and the
+  monthly call count is tracked, because the free tier is 10 calls a
+  month - the tool refuses to overspend and shows the remaining budget.
+  A positive answer becomes a `chainabuse` label (category scam_report,
+  MEDIUM) so every later trace raises the existing "publicly reported
+  scam address" finding. Settings: API key (encrypted) and access tier
+  (free / law-enforcement partner: 5,000 calls/hour, private report
+  data via `includePrivate`); agencies apply for the partner tier at
+  chainabuse.com/partner-contact. Reports are presented as unverified
+  third-party claims throughout.
+- **Flag packs (agency-to-agency sharing).** Flags dialog: "Export flag
+  pack" writes this agency's flags (address, chain, reason, date - no
+  case names or numbers) with the agency's name/contact from Settings
+  and a SHA-256 over the flag list. "Import a partner's pack" verifies
+  the format and hash (a tampered file is rejected) and stores the
+  flags as a SEPARATE label source (`pack:<agency>`, category
+  shared_flag). They raise a distinct "flagged by a PARTNER agency"
+  finding, get a dashed orange ring on the map, a
+  "[AGENCY - partner designation]" marker in the PDF address table, and
+  are never merged into this agency's own flags. A second import from
+  the same agency replaces the first. The hash detects corruption, not
+  impersonation (design decision: agencies exchange packs through
+  channels they already trust).
+- **Ethereum attribution depth: eth-labels import.** New Settings
+  download of dawsbot/eth-labels (MIT; Etherscan's public name tags,
+  ~113k Ethereum-mainnet rows, ~87k distinct addresses). Custodial
+  exchanges (curated slug list) import as MEDIUM-confidence exchange
+  labels; Etherscan "Take Action"/"Blocked"/*-exploit tags as
+  scam_report labels; everything else (protocols, contracts, funds) as
+  LOW-confidence informational labels carried on nodes for context.
+  Every label states its provenance ("Etherscan tag via eth-labels").
+  Auto-refreshes monthly once downloaded.
+- **Bitcoin address clustering (common-input-ownership).** The Bitcoin
+  provider records each parsed transaction's inputs (no extra pulls);
+  after a trace the engine unions co-spent addresses into clusters,
+  EXCLUDING CoinJoin-like transactions (5+ inputs with 3+ equal-value
+  outputs) and reporting how many were skipped. Each cluster carries
+  its evidencing transaction ids, a MEDIUM confidence (LOW when a
+  12+-input co-spend contributed, which is also how services batch),
+  and is named as a service's wallet cluster when a member is
+  attributed. Presented as an "Address clusters (heuristic)" card, an
+  `address_cluster` finding, a cluster marker on nodes, a PDF section,
+  and an affidavit paragraph - always as an inference, never a fact.
+- **Plain-language wallet summary.** "📝 Plain-language summary" on any
+  address panel writes a short paragraph set from the tool's own data:
+  attribution with provenance, live activity, this trace's view (what
+  came in, what went out, share to labelled exchanges, funds at rest),
+  agency/partner/scam designations, cached Chainabuse reports and a
+  suggested next step. No AI model is involved; every sentence maps to
+  a fact in the response, and the text can be copied.
+- **Bulk address triage (⊞ Triage).** Paste up to 500 addresses; each
+  is chain-detected and checked against every label source, this
+  agency's flags, partner packs, scam lists, cached Chainabuse reports
+  and the watch list, optionally with live activity (one throttled
+  call per address). Runs execute in the background with progress,
+  are saved (`triage_runs`) and exportable as CSV, and rows offer
+  Trace / Flag / Watch actions. Interrupted runs are marked failed at
+  the next start.
+
+### Dependencies
+- Unchanged. eth-labels (MIT) and Chainabuse (API terms) are external
+  data sources, downloaded only on request.
+
+### Known limitations / problems detected
+1. Chainabuse's `chain` filter enum is not documented publicly, so
+   lookups are by address only (an address string is chain-specific
+   anyway; EVM addresses may return reports from other EVM chains).
+2. eth-labels exchange classification is a curated slug list; a
+   custodial exchange missing from it imports as informational only.
+   Tether/Bitfinex-affiliated token contracts are tagged under the
+   exchange slug by Etherscan and are excluded from exchange
+   classification by tag text (Token / Stablecoin / Contract / Proxy),
+   which is a heuristic.
+3. Clustering is Bitcoin-only and sees only the transactions the trace
+   parsed; addresses co-spent in transactions outside the trace are not
+   linked. Clusters are inferences with known failure modes (CoinJoin,
+   custodial batching) and must be described as such in any affidavit.
+4. Triage activity mode is bounded by the same free-API rate limits as
+   tracing; 500 addresses with activity can take several minutes.
+5. v0.12.0 limitations still apply.
+
 ## v0.12.0 — 2026-09-04 (Web UI modernisation)
 
 ### Functionality

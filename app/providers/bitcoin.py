@@ -120,6 +120,22 @@ class BitcoinProvider(ProviderClient):
 
     # -- normalised view used by the tracing engine -------------------------
 
+    # -- transaction input/output record for address clustering ------------
+
+    def _record_tx(self, tx: dict) -> None:
+        """Remember each parsed transaction's input addresses and output
+        values (no extra network calls) for the common-input-ownership
+        clustering step (app/tracing/cluster.py)."""
+        store = self.__dict__.setdefault("tx_inputs", {})
+        txid = tx.get("txid")
+        if not txid or txid in store:
+            return
+        store[txid] = {
+            "inputs": {vin.get("prevout", {}).get("scriptpubkey_address")
+                       for vin in tx.get("vin", []) if vin.get("prevout")},
+            "outputs": [vout.get("value", 0) for vout in tx.get("vout", [])],
+        }
+
     def outgoing_movements(self, address: str, max_txs: int) -> list:
         """Spends FROM `address`: for every transaction where the address
         appears in an input, emit one movement per output.
@@ -129,6 +145,7 @@ class BitcoinProvider(ProviderClient):
         `is_possible_change` when it pays back to the same address only."""
         movements = []
         for tx in self._address_transactions(address, max_txs):
+            self._record_tx(tx)
             input_addresses = {
                 vin.get("prevout", {}).get("scriptpubkey_address")
                 for vin in tx.get("vin", [])
@@ -169,6 +186,7 @@ class BitcoinProvider(ProviderClient):
         deducted per input."""
         movements = []
         for tx in self._address_transactions(address, max_txs):
+            self._record_tx(tx)
             received = any(
                 vout.get("scriptpubkey_address") == address
                 for vout in tx.get("vout", []))
@@ -197,6 +215,7 @@ class BitcoinProvider(ProviderClient):
         """Movements for a trace that STARTS from a txid rather than an
         address: every output of that transaction."""
         tx = self.transaction(txid)
+        self._record_tx(tx)
         timestamp = tx.get("status", {}).get("block_time")
         input_addresses = sorted({
             vin.get("prevout", {}).get("scriptpubkey_address") or "coinbase"

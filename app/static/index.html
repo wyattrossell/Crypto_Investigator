@@ -24,6 +24,8 @@ its own transaction date."></span>
       id="watch-alert-badge" class="alert-badge hidden"></span></button>
     <button id="btn-flags" class="ghost">🚩 Flags</button>
     <button id="btn-custodians" class="ghost">📇 Legal contacts</button>
+    <button id="btn-triage" class="ghost" title="Check many addresses at
+once against every label source, flag list and scam report">⊞ Triage</button>
     <button id="btn-ic3" class="ghost">IC3 helper</button>
     <span class="nav-sep"></span>
     <button id="btn-settings" class="ghost">⚙ Settings</button>
@@ -185,6 +187,7 @@ machine).">Import case…</button>
     <div id="disposition"></div>
     <div id="findings"></div>
     <div id="exit-summary"></div>
+    <div id="clusters"></div>
     <div id="warnings"></div>
 
     <section class="card graph-card">
@@ -200,6 +203,7 @@ machine).">Import case…</button>
         <span><i class="dot high"></i>Busy service (not expanded)</span>
         <span><i class="dot unexpanded"></i>Trail edge (not explored)</span>
         <span><i class="dot flagged"></i>Flagged by this agency</span>
+        <span><i class="dot shared"></i>Flagged by a partner agency</span>
         <span class="legend-note">- - - collapsed pass-through chain</span>
       </div>
     </div>
@@ -336,6 +340,50 @@ prioritise and why?)"></textarea>
   </div>
 </dialog>
 
+<!-- ============ Bulk triage dialog ============ -->
+<dialog id="triage-dialog">
+  <h2>⊞ Bulk address triage</h2>
+  <p class="hint">Paste addresses from a seized device, an exchange
+    production or a victim list (one per line, any chain). Each is checked
+    against every label source, this agency's flags, partner packs, scam
+    lists and cached Chainabuse reports. Optionally fetch live activity
+    (one rate-limited API call per address — slower). Runs are saved and
+    exportable as CSV.</p>
+  <textarea id="triage-input" rows="6"
+    placeholder="bc1q…&#10;0x…&#10;T…  (one address per line; separators and blank lines are ignored)"></textarea>
+  <div class="grid2">
+    <label class="field-label">Blockchain
+      <select id="triage-chain">
+        <option value="auto">Detect from each address (recommended)</option>
+        <option value="bitcoin">Bitcoin</option>
+        <option value="ethereum">Ethereum</option>
+        <option value="tron">Tron</option>
+      </select></label>
+    <div>
+      <label class="check"><input type="checkbox" id="triage-activity">
+        Fetch live activity (transaction count, balance)</label>
+      <label class="check"><input type="checkbox" id="triage-link-case"
+        checked> Link this run to the selected case</label>
+    </div>
+  </div>
+  <div class="panel-actions">
+    <button id="btn-triage-run" class="primary" style="width:auto">Run
+      triage</button>
+    <span id="triage-status" class="muted"></span>
+    <a id="btn-triage-csv" class="button secondary small hidden" download>
+      Export CSV</a>
+  </div>
+  <div id="triage-summary"></div>
+  <div id="triage-results" style="overflow-x:auto"></div>
+  <details id="triage-history-details">
+    <summary>Previous triage runs</summary>
+    <div id="triage-history" class="history-list"></div>
+  </details>
+  <div class="dialog-buttons">
+    <button id="btn-triage-close" class="secondary">Close</button>
+  </div>
+</dialog>
+
 <!-- ============ Settings dialog ============ -->
 <dialog id="settings-dialog">
   <h2>Settings</h2>
@@ -376,6 +424,27 @@ prioritise and why?)"></textarea>
     <input id="setting-trongrid-key" placeholder="paste key">
     <span id="trongrid-key-state" class="muted"></span>
   </label>
+  <label class="field-label">Chainabuse API key (free —
+    <a href="https://www.chainabuse.com" target="_blank">any Chainabuse
+    account can generate one</a>; the free tier allows 10 lookups a
+    month, so lookups are on-demand and cached)
+    <input id="setting-chainabuse-key" placeholder="paste key">
+    <span id="chainabuse-key-state" class="muted"></span>
+  </label>
+  <div class="grid2">
+    <label class="field-label">Chainabuse access tier
+      <select id="setting-chainabuse-tier">
+        <option value="free">Free (10 lookups / month)</option>
+        <option value="partner">Law-enforcement partner (5,000 / hour,
+          private report data)</option>
+      </select></label>
+    <span id="chainabuse-usage" class="muted" style="align-self:end"></span>
+  </div>
+  <p class="hint">Verified agencies can apply for the free
+    law-enforcement partner tier at
+    <a href="https://www.chainabuse.com/partner-contact" target="_blank">
+    chainabuse.com/partner-contact</a>. Chainabuse reports are public,
+    unverified claims: they corroborate, they do not prove.</p>
   <p class="hint">API keys are encrypted at rest with Windows account
     encryption (DPAPI). If this database is opened under a different
     Windows account, keys read back empty and must be re-entered.</p>
@@ -480,6 +549,16 @@ prioritise and why?)"></textarea>
       (Ethereum). Traced funds reaching a listed address are raised as a
       corroborating finding — a report, not proof.</p>
   </div>
+  <div>
+    <button id="btn-refresh-eth-labels" class="secondary">Download Ethereum
+      name tags (eth-labels)</button>
+    <span id="eth-labels-status" class="muted"></span>
+    <p class="hint">Etherscan's public name tags (~113k Ethereum
+      addresses, MIT-licensed eth-labels dataset). Exchanges are imported
+      at MEDIUM confidence, phishing/hack tags as scam reports, the rest as
+      informational context. Provenance ("Etherscan tag via eth-labels")
+      is shown on every label.</p>
+  </div>
   <div class="dialog-buttons">
     <button id="btn-save-settings" class="primary">Save</button>
     <button id="btn-close-settings" class="secondary">Close</button>
@@ -565,6 +644,25 @@ prioritise and why?)"></textarea>
     <span id="flag-add-status" class="muted"></span>
   </div>
   <hr>
+  <h3 class="dialog-subhead">Share with other agencies (flag packs)</h3>
+  <p class="hint">Export this agency's flags as a pack file (addresses,
+    reasons and dates only — no case names or numbers) and send it to a
+    partner agency. Imported packs stay a <b>separate</b> source: they
+    raise a "flagged by a partner agency" finding and mark the map, but
+    they are never merged into this agency's own flags. Each pack carries
+    an integrity hash; it detects corruption, not impersonation, so
+    exchange packs through channels you already trust.</p>
+  <div class="panel-actions">
+    <a id="btn-pack-export" class="button secondary small"
+      href="/api/flags/pack.json" download>Export flag pack</a>
+    <button id="btn-pack-import" class="secondary small">Import a partner's
+      pack…</button>
+    <input type="file" id="pack-import-file" accept=".json" class="hidden">
+    <span id="pack-status" class="muted"></span>
+  </div>
+  <div id="packs-list"></div>
+  <hr>
+  <h3 class="dialog-subhead">This agency's flags</h3>
   <div id="flags-list"></div>
   <div class="dialog-buttons">
     <button id="btn-flags-close" class="secondary">Close</button>

@@ -144,6 +144,21 @@ def affidavit_text(case: dict, trace_row: dict, result: dict,
         f"permits any analyst to re-issue the same requests and compare "
         f"hashes.",
     ]
+    clusters = [c for c in (result.get("clusters") or [])
+                if len(c.get("traced_addresses", [])) >= 2]
+    if clusters:
+        paragraphs += [
+            "",
+            f"6a. Address clustering. For {len(clusters)} group(s) of "
+            f"addresses the tool applied the common-input-ownership "
+            f"heuristic, under which all inputs of a single Bitcoin "
+            f"transaction are presumed to have been controlled by one "
+            f"party at the time of spending. Transactions exhibiting "
+            f"CoinJoin characteristics were excluded. Each cluster is "
+            f"identified in the report with the transaction(s) evidencing "
+            f"it and a stated confidence level; clustering is an inference "
+            f"drawn from public data, not a determination of identity.",
+        ]
     if exit_sentence:
         paragraphs += ["", f"7. Result. {exit_sentence} The hop-by-hop "
                        "path from the starting address to each service, "

@@ -358,6 +358,13 @@ def build_report(pdf_path: str, case: dict, trace_row: dict, result: dict,
         role_text = node["role"].replace("_", " ")
         if "agency_flagged" in (node.get("flags") or []):
             role_text += " [AGENCY-FLAGGED]"
+        if "shared_flagged" in (node.get("flags") or []):
+            partner = next((l["entity_name"].split(":")[0]
+                            for l in node.get("labels", [])
+                            if l.get("category") == "shared_flag"), "partner")
+            role_text += f" [{partner.upper()} - partner designation]"
+        if node.get("cluster"):
+            role_text += f" [cluster {node['cluster']}]"
         basis_text = node["basis"] or "-"
         note = annotations.get(node["address"])
         if note:
@@ -390,6 +397,41 @@ def build_report(pdf_path: str, case: dict, trace_row: dict, result: dict,
                                   0.55 * inch]))
 
     # ------------------------------------------------ 6. Methodology
+    clusters = [c for c in (result.get("clusters") or [])
+                if len(c.get("traced_addresses", [])) >= 2]
+    if clusters:
+        story.append(PageBreak())
+        story.append(Paragraph("Address Clusters (heuristic inference)",
+                               styles["h1"]))
+        story.append(Paragraph(
+            "The common-input-ownership heuristic presumes that all inputs "
+            "of one Bitcoin transaction were controlled by one party at "
+            "the time of spending. Clusters below are INFERENCES at the "
+            "stated confidence, each supported by the listed transaction(s); "
+            "CoinJoin-like transactions were excluded. A cluster does not "
+            "identify a person.", styles["small"]))
+        story.append(Spacer(1, 6))
+        cluster_rows = [["Cluster", "Members (traced / total)",
+                         "Confidence", "Evidence transaction(s)"]]
+        for entry in clusters:
+            members = ", ".join(entry["traced_addresses"][:8])
+            if len(entry["traced_addresses"]) > 8:
+                members += f" (+{len(entry['traced_addresses']) - 8} more)"
+            txids = ", ".join(entry["evidence_txids"][:3])
+            if entry["evidence_count"] > 3:
+                txids += f" (+{entry['evidence_count'] - 3} more)"
+            cluster_rows.append([
+                entry["id"],
+                _mono_cell(f"{members}  [{len(entry['traced_addresses'])} / "
+                           f"{entry['size']}]", styles),
+                entry["confidence"].upper()
+                + (f"; service: {entry['service_label']}"
+                   if entry.get("service_label") else ""),
+                _mono_cell(txids, styles),
+            ])
+        story.append(_table(cluster_rows, [45, 250, 80, 155]))
+        story.append(Spacer(1, 8))
+
     story.append(PageBreak())
     story.append(Paragraph("Methodology and Limitations", styles["h1"]))
     for paragraph in [

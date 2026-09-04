@@ -14,7 +14,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 APP_NAME = "Crypto Investigator"
-APP_VERSION = "0.12.0"
+APP_VERSION = "0.13.0"
 
 # The tool binds to localhost ONLY. Evidence must not be exposed on a network
 # interface without a deliberate deployment decision (Phase 3+).
@@ -207,6 +207,49 @@ SCAMSNIFFER_ADDRESSES_URL = ("https://raw.githubusercontent.com/scamsniffer/"
 # flags): shown on nodes and raised as a finding, never a stopping point.
 LABEL_CATEGORY_SCAM_REPORT = "scam_report"
 
+# Chainabuse (TRM Labs) public scam-report API. Basic auth with the API
+# key as the username. Free tier: 10 calls per month (a call returns up
+# to 50 reports); law-enforcement partner tier: up to 5,000 calls/hour and
+# richer data. Lookups are ON DEMAND (a button), cached locally, and the
+# monthly budget is tracked so the free tier is never burned by accident.
+CHAINABUSE_API_BASE = "https://api.chainabuse.com/v0"
+CHAINABUSE_FREE_MONTHLY_CALLS = 10
+CHAINABUSE_PARTNER_HOURLY_CALLS = 5000
+CHAINABUSE_TIERS = ("free", "partner")
+CHAINABUSE_CACHE_DAYS = 30          # re-use a stored answer this long
+CHAINABUSE_PAGE_SIZE = 50
+LABEL_SOURCE_CHAINABUSE = "chainabuse"
+CHAINABUSE_PARTNER_URL = "https://www.chainabuse.com/partner-contact"
+
+# eth-labels (github.com/dawsbot/eth-labels, MIT): ~115k EVM account
+# labels reformatted from Etherscan's public name tags. Imported for
+# Ethereum mainnet (chainId 1) only. Provenance is stated on every label:
+# these are Etherscan community/explorer tags, not official records.
+ETH_LABELS_CSV_URL = ("https://raw.githubusercontent.com/dawsbot/eth-labels/"
+                      "v1/data/csv/accounts.csv")
+ETH_LABELS_CHAIN_ID = "1"
+LABEL_SOURCE_ETH_LABELS = "eth_labels"
+
+# Flag packs: an agency's own wallet flags exported for another agency.
+# Imported packs become a SEPARATE label source (category shared_flag)
+# so a partner's designation is never presented as this agency's own.
+FLAG_PACK_FORMAT = "crypto-investigator-flag-pack/1"
+LABEL_CATEGORY_SHARED_FLAG = "shared_flag"
+LABEL_SOURCE_PACK_PREFIX = "pack:"
+
+# Bitcoin address clustering (common-input-ownership heuristic): inputs
+# of one transaction are presumed controlled by one wallet. CoinJoin-like
+# transactions (many inputs, several equal-value outputs) are excluded
+# because that presumption fails for them. Presented at MEDIUM/LOW
+# confidence with the evidencing transaction(s) shown - never as fact.
+CLUSTER_COINJOIN_MIN_INPUTS = 5
+CLUSTER_COINJOIN_MIN_EQUAL_OUTPUTS = 3
+CLUSTER_LOW_CONFIDENCE_INPUTS = 12   # very wide co-spends may be a service
+CLUSTER_MAX_LISTED_ADDRESSES = 60
+
+# Bulk address triage.
+TRIAGE_MAX_ADDRESSES = 500
+
 # CoinGecko public API (no key). Spot prices drive the header ticker and the
 # dust-threshold USD hints; the /history endpoint values traced movements at
 # the transaction date. USD figures are CONTEXT, not market appraisals.
@@ -250,6 +293,8 @@ MIN_REQUEST_INTERVAL_SECONDS = {
     "scamsniffer": 0.5,  # raw.githubusercontent.com blacklist download
     "trongrid": 1.1,     # documented anonymous tier is 1 req/s
     "trongrid-keyed": 0.2,   # free key allows 15 req/s; stay well under
+    "chainabuse": 1.0,   # on-demand lookups; the monthly budget is the limit
+    "eth-labels": 0.5,   # raw.githubusercontent.com CSV download
     "blockscout": 0.5,   # keyless tier is 300 req/min; stay well under
     "routescan": 0.6,    # keyless tier is 2 req/s, 10k/day
     "kraken": 1.1,       # public endpoints ~1 req/s per IP
@@ -379,13 +424,15 @@ LABEL_AUTOREFRESH_DAYS = {
     "ofac_sdn": 7,
     "scamsniffer": 7,
     "graphsense_tagpack": 30,
+    "eth_labels": 30,
 }
 
 # Settings whose values are secrets: encrypted at rest with Windows DPAPI
 # (user-scoped). On a machine/profile where DPAPI cannot decrypt them the
 # value reads back empty and must be re-entered - documented behaviour.
 SECRET_SETTING_KEYS = ("etherscan_api_key", "coingecko_api_key",
-                       "trongrid_api_key", "ai_api_key")
+                       "trongrid_api_key", "ai_api_key",
+                       "chainabuse_api_key")
 
 # ---------------------------------------------------------------------------
 # Optional AI assistant (OFF by default; nothing is sent anywhere until the

@@ -10,7 +10,16 @@ law-enforcement investigator divided by implementation cost in THIS tool,
 and split by whether they need proprietary data. The full research reports
 behind this update are summarised in the v0.8.0 gap-analysis document.
 
-## Already implemented (as of v0.9.0)
+## Already implemented (as of v0.13.0)
+
+- **Wallet intelligence (v0.13.0):** on-demand Chainabuse lookups with
+  budget tracking; agency-to-agency flag packs with integrity hash
+  (deconfliction by file); eth-labels EVM attribution import; Bitcoin
+  common-input clustering (glass-box, CoinJoin-excluded); plain-language
+  wallet summaries (no AI); bulk address triage with CSV export.
+- **Distribution (v0.11.0–v0.12.0):** console-free tray launcher,
+  Windows installer + portable zip, per-user data folder, redesigned UI
+  with dark theme and trace history.
 
 - **Wallet watchlists + movement alerts** (QLUE, MetaSleuth, Arkham,
   Etherscan, TRM, Scorechain — was the most common feature we lacked):
@@ -56,22 +65,22 @@ behind this update are summarised in the v0.8.0 gap-analysis document.
 
 ## High value, feasible with free/public data (build next)
 
-1. **Chainabuse API enrichment** (free key, Basic auth,
+1. **SHIPPED (v0.13.0) — Chainabuse API enrichment** (free key, Basic auth,
    GET /v0/reports?address=). Free tier is only 10 calls/month, so make it
    a per-address button, not automatic; apply for the free LE partner tier
    (private victim reports, jurisdiction filters) via
    chainabuse.com/partner-contact — that is the real prize.
-3. **Bulk address triage** (Elliptic bulk screening, Crystal Lite,
+3. **SHIPPED (v0.13.0) — Bulk address triage** (Elliptic bulk screening, Crystal Lite,
    TRM Tactical). Paste N addresses (seized phone/exchange records), get
    labels/flags/balances/first-last activity in a table. Cheap: label
    lookup + address_summary in a loop over the new 337k-label base.
-4. **Plain-language wallet summary** (Chainalysis Rapid's core). One
+4. **SHIPPED (v0.13.0) — Plain-language wallet summary** (Chainalysis Rapid's core). One
    paragraph per wallet: age, activity, counterparties, % to labelled
    services, flags. Pure arithmetic over data we already fetch.
-5. **EVM label depth**: GraphSense is BTC-heavy (336k BTC vs ~700 ETH).
+5. **SHIPPED (v0.13.0) — EVM label depth**: GraphSense is BTC-heavy (336k BTC vs ~700 ETH).
    Import dawsbot/eth-labels (~169k EVM labels, MIT, Etherscan-scraped —
    note provenance honestly) to close the Ethereum attribution gap.
-6. **Bitcoin address clustering via published heuristics**
+6. **SHIPPED (v0.13.0) — Bitcoin address clustering via published heuristics**
    (common-input-ownership + change detection), labelled MEDIUM/LOW
    confidence. Court precedent exists (Sterlingov Daubert), but implement
    glass-box: show WHY two addresses cluster. WalletExplorer (alive,
@@ -79,7 +88,7 @@ behind this update are summarised in the v0.8.0 gap-analysis document.
 7. **Date-window fetching** (kills the "newest-25 hides the old spend"
    limitation): Etherscan getblocknobytime + sort=asc from the arrival
    block; Esplora cursor pagination back to the arrival timestamp.
-8. **Deconfliction export/import** (INTERPOL pain point; TRM Tactical
+8. **SHIPPED (v0.13.0) — Deconfliction export/import** (INTERPOL pain point; TRM Tactical
    feature): export the agency's flag list as a signed CSV; import
    another agency's list as a separate label source.
 9. **Canvas polish**: pin layout, hide nodes, per-address investigator

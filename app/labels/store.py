@@ -246,6 +246,115 @@ def refresh_scamsniffer_labels() -> dict:
     return {"addresses": len(rows)}
 
 
+class EthLabelsClient(ProviderClient):
+    provider_name = "eth-labels"
+
+
+# eth-labels 'label' slugs -> our categories. Slugs not listed are imported
+# as informational 'other' labels (never a stopping point). Exchanges here
+# are custodial services where legal process can be served; bridges,
+# DEXes and staking protocols deliberately are NOT exchanges.
+ETH_LABELS_EXCHANGE_SLUGS = {
+    "abra", "ascendex", "azbit", "bilaxy", "bitbank", "bitfinex", "bitflyer",
+    "bitget", "bithumb", "bitmart", "bitmex", "bitstamp", "bittrex",
+    "bitvavo", "blockfi", "blofin-exchange", "celsius-network", "cex-io",
+    "coinbase", "coincheck", "coindcx", "coinex", "coinjar", "coinone",
+    "coinspot", "crypto-com", "delta-exchange", "deribit", "ftx", "gate-io",
+    "gemini", "hitbtc", "hotbit", "indodax", "korbit", "kraken", "kucoin",
+    "latoken", "liquid", "mexc", "nexo", "okx", "poloniex", "shapeshift",
+    "upbit", "uphold", "zb-com", "binance", "huobi", "htx", "bybit",
+}
+ETH_LABELS_MIXER_SLUGS = {"tornado-cash", "mixer", "ethereum-mixer"}
+# Etherscan's "Take Action" / "Blocked" tags mark phishing, hack and
+# exploit addresses; *-exploit slugs are named incident exploiters.
+ETH_LABELS_SCAM_SLUGS = {"take-action", "blocked"}
+
+
+import re as _re
+
+# Etherscan files an exchange's token and contract deployments under the
+# exchange's slug (e.g. the USDT contract under 'bitfinex'). Those are
+# not custodial deposit wallets and must not become exits or scam hits.
+_ETH_LABELS_NON_WALLET_TAG = _re.compile(
+    r"\b(token|stablecoin|contract|proxy|vesting|airdrop|staking|"
+    r"deployer)\b", _re.IGNORECASE)
+
+
+def _eth_label_category(slug: str, name_tag: str = "") -> str:
+    if _ETH_LABELS_NON_WALLET_TAG.search(name_tag or ""):
+        return "other"
+    if slug in ETH_LABELS_EXCHANGE_SLUGS:
+        return "exchange"
+    if slug in ETH_LABELS_MIXER_SLUGS:
+        return "mixer"
+    if slug in ETH_LABELS_SCAM_SLUGS or slug.endswith("-exploit") or \
+            slug.endswith("-hack"):
+        return config.LABEL_CATEGORY_SCAM_REPORT
+    return "other"
+
+
+def refresh_eth_labels() -> dict:
+    """Download and import dawsbot/eth-labels (MIT): Etherscan's public
+    name tags reformatted, Ethereum mainnet only. Exchanges become
+    MEDIUM-confidence exchange labels (they are explorer/community tags,
+    not official records); Take-Action/Blocked/exploit tags become
+    scam_report labels; everything else is an informational 'other' label
+    carried on the node for context. Replaces all 'eth_labels' labels.
+
+    Returns {"labels": n, "exchange": n, "mixer": n, "scam_report": n,
+    "other": n}."""
+    import csv
+    import io
+    client = EthLabelsClient()
+    try:
+        body = client.fetch(config.ETH_LABELS_CSV_URL, cacheable=False)
+    finally:
+        client.close()
+    reader = csv.DictReader(io.StringIO(body.decode("utf-8", "replace")))
+    required = {"address", "chainId", "label", "nameTag"}
+    if not required.issubset(set(reader.fieldnames or [])):
+        raise ValueError("eth-labels CSV: unexpected columns "
+                         f"{reader.fieldnames}")
+    counts = {"exchange": 0, "mixer": 0,
+              config.LABEL_CATEGORY_SCAM_REPORT: 0, "other": 0}
+    best = {}    # one row per address: prefer exchange > mixer > scam > other
+    rank = {"exchange": 0, "mixer": 1, config.LABEL_CATEGORY_SCAM_REPORT: 2,
+            "other": 3}
+    for record in reader:
+        if (record.get("chainId") or "").strip() != config.ETH_LABELS_CHAIN_ID:
+            continue
+        address = (record.get("address") or "").strip()
+        if not address.startswith("0x") or len(address) != 42:
+            continue
+        slug = (record.get("label") or "").strip().lower()
+        name = (record.get("nameTag") or "").strip() or slug
+        category = _eth_label_category(slug, name)
+        key = normalise_address(address, config.CHAIN_ETHEREUM)
+        current = best.get(key)
+        if current is None or rank[category] < rank[current[0]]:
+            best[key] = (category, name, slug)
+    rows = []
+    for key, (category, name, slug) in best.items():
+        if category in ("exchange", "mixer"):
+            entity = f"{name} [Etherscan tag via eth-labels]"
+            confidence = config.CONFIDENCE_MEDIUM
+        elif category == config.LABEL_CATEGORY_SCAM_REPORT:
+            entity = (f"Etherscan '{slug}' tag: {name} (phishing/hack/"
+                      f"exploit designation via eth-labels; unverified)")
+            confidence = config.CONFIDENCE_MEDIUM
+        else:
+            entity = f"Etherscan tag: {name} ({slug})"
+            confidence = config.CONFIDENCE_LOW
+        counts[category] += 1
+        rows.append((key, config.CHAIN_ETHEREUM, entity, category, confidence))
+    if not rows:
+        raise ValueError("eth-labels CSV contained no Ethereum mainnet rows")
+    database.labels_replace_source(config.LABEL_SOURCE_ETH_LABELS, rows)
+    summary = {"labels": len(rows)}
+    summary.update(counts)
+    return summary
+
+
 def load_seed_labels() -> int:
     """Import the bundled community exchange list (idempotent).
     Returns the number of labels loaded."""

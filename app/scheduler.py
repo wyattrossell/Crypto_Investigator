@@ -159,6 +159,7 @@ _REFRESHERS = {
     "ofac_sdn": label_store.refresh_ofac_labels,
     "scamsniffer": label_store.refresh_scamsniffer_labels,
     "graphsense_tagpack": label_store.refresh_graphsense_labels,
+    "eth_labels": label_store.refresh_eth_labels,
 }
 
 

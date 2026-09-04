@@ -136,6 +136,51 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS intel_lookups (
+        provider     TEXT NOT NULL,     -- 'chainabuse'
+        address      TEXT NOT NULL,     -- normalised
+        chain        TEXT NOT NULL,
+        fetched_utc  TEXT NOT NULL,
+        report_count INTEGER NOT NULL DEFAULT 0,
+        payload_json TEXT NOT NULL,     -- parsed, trimmed response
+        PRIMARY KEY (provider, address, chain)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS api_usage (
+        provider TEXT NOT NULL,
+        period   TEXT NOT NULL,         -- 'YYYY-MM' (monthly budgets)
+        count    INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (provider, period)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS label_packs (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        source       TEXT NOT NULL UNIQUE,  -- labels.source key ('pack:...')
+        agency       TEXT NOT NULL,
+        contact      TEXT DEFAULT '',
+        exported_utc TEXT,
+        imported_utc TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        count        INTEGER NOT NULL,
+        note         TEXT DEFAULT ''
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS triage_runs (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id       INTEGER REFERENCES cases(id),
+        created_utc   TEXT NOT NULL,
+        params_json   TEXT NOT NULL,
+        status        TEXT NOT NULL,   -- running | finished | failed
+        progress_note TEXT DEFAULT '',
+        result_json   TEXT,
+        error         TEXT,
+        finished_utc  TEXT
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS labels (
         address     TEXT NOT NULL,     -- normalised (lowercase for EVM)
         chain       TEXT NOT NULL,
@@ -284,6 +329,175 @@ def labels_lookup(address: str, chain: str) -> list:
         "WHERE address = ? AND chain = ?",
         (address, chain),
     ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def label_upsert(address: str, chain: str, entity_name: str,
+                 category: str, source: str, confidence: str) -> None:
+    """Insert or update ONE label (used by on-demand lookups)."""
+    conn = get_connection()
+    conn.execute(
+        "INSERT OR REPLACE INTO labels "
+        "(address, chain, entity_name, category, source, confidence, "
+        "updated_utc) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (address, chain, entity_name, category, source, confidence,
+         utc_now_iso()))
+    conn.commit()
+
+
+def label_delete(address: str, chain: str, source: str) -> None:
+    conn = get_connection()
+    conn.execute("DELETE FROM labels WHERE address = ? AND chain = ? "
+                 "AND source = ?", (address, chain, source))
+    conn.commit()
+
+
+def labels_delete_source(source: str) -> int:
+    conn = get_connection()
+    cur = conn.execute("DELETE FROM labels WHERE source = ?", (source,))
+    conn.commit()
+    return cur.rowcount
+
+
+# ---------------------------------------------------------------------------
+# On-demand intelligence lookups (cache + monthly API budgets)
+# ---------------------------------------------------------------------------
+
+def intel_cache_get(provider: str, address: str, chain: str):
+    row = get_connection().execute(
+        "SELECT * FROM intel_lookups WHERE provider = ? AND address = ? "
+        "AND chain = ?", (provider, address, chain)).fetchone()
+    if row is None:
+        return None
+    record = dict(row)
+    record["payload"] = json.loads(record.pop("payload_json") or "{}")
+    return record
+
+
+def intel_cache_put(provider: str, address: str, chain: str,
+                    report_count: int, payload: dict) -> None:
+    conn = get_connection()
+    conn.execute(
+        "INSERT OR REPLACE INTO intel_lookups "
+        "(provider, address, chain, fetched_utc, report_count, payload_json) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (provider, address, chain, utc_now_iso(), report_count,
+         json.dumps(payload)))
+    conn.commit()
+
+
+def intel_cache_count(provider: str) -> int:
+    row = get_connection().execute(
+        "SELECT COUNT(*) AS n FROM intel_lookups WHERE provider = ?",
+        (provider,)).fetchone()
+    return row["n"] if row else 0
+
+
+def api_usage_get(provider: str, period: str) -> int:
+    row = get_connection().execute(
+        "SELECT count FROM api_usage WHERE provider = ? AND period = ?",
+        (provider, period)).fetchone()
+    return row["count"] if row else 0
+
+
+def api_usage_increment(provider: str, period: str) -> int:
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO api_usage (provider, period, count) VALUES (?, ?, 1) "
+        "ON CONFLICT(provider, period) DO UPDATE SET count = count + 1",
+        (provider, period))
+    conn.commit()
+    return api_usage_get(provider, period)
+
+
+# ---------------------------------------------------------------------------
+# Imported flag packs (another agency's designations, kept separate)
+# ---------------------------------------------------------------------------
+
+def label_pack_add(source: str, agency: str, contact: str,
+                   exported_utc, sha256: str, count: int,
+                   note: str = "") -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT OR REPLACE INTO label_packs (source, agency, contact, "
+        "exported_utc, imported_utc, sha256, count, note) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (source, agency, contact, exported_utc, utc_now_iso(), sha256,
+         count, note))
+    conn.commit()
+    return cur.lastrowid
+
+
+def label_packs_list() -> list:
+    rows = get_connection().execute(
+        "SELECT * FROM label_packs ORDER BY imported_utc DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def label_pack_get(pack_id: int):
+    row = get_connection().execute(
+        "SELECT * FROM label_packs WHERE id = ?", (pack_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def label_pack_remove(pack_id: int) -> bool:
+    pack = label_pack_get(pack_id)
+    if pack is None:
+        return False
+    labels_delete_source(pack["source"])
+    conn = get_connection()
+    conn.execute("DELETE FROM label_packs WHERE id = ?", (pack_id,))
+    conn.commit()
+    return True
+
+
+def label_pack_by_agency(agency: str):
+    row = get_connection().execute(
+        "SELECT * FROM label_packs WHERE lower(agency) = lower(?)",
+        (agency,)).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Bulk triage runs
+# ---------------------------------------------------------------------------
+
+def triage_create(case_id, params: dict) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT INTO triage_runs (case_id, created_utc, params_json, status) "
+        "VALUES (?, ?, ?, 'running')",
+        (case_id, utc_now_iso(), json.dumps(params)))
+    conn.commit()
+    return cur.lastrowid
+
+
+def triage_update(run_id: int, status: str, progress_note: str = "",
+                  result: dict = None, error: str = None) -> None:
+    conn = get_connection()
+    finished = utc_now_iso() if status in ("finished", "failed") else None
+    conn.execute(
+        "UPDATE triage_runs SET status = ?, progress_note = ?, "
+        "result_json = COALESCE(?, result_json), error = ?, "
+        "finished_utc = COALESCE(?, finished_utc) WHERE id = ?",
+        (status, progress_note,
+         json.dumps(result) if result is not None else None,
+         error, finished, run_id))
+    conn.commit()
+
+
+def triage_get(run_id: int):
+    row = get_connection().execute(
+        "SELECT * FROM triage_runs WHERE id = ?", (run_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def triage_list(limit: int = 20) -> list:
+    rows = get_connection().execute(
+        "SELECT t.id, t.case_id, t.created_utc, t.status, t.finished_utc, "
+        "t.params_json, c.name AS case_name FROM triage_runs t "
+        "LEFT JOIN cases c ON c.id = t.case_id "
+        "ORDER BY t.id DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -580,6 +794,17 @@ def update_trace_status(trace_id: int, status: str, progress_note: str = "",
          error, finished, trace_id),
     )
     conn.commit()
+
+
+def fail_orphaned_triage_runs() -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE triage_runs SET status = 'failed', "
+        "error = 'Interrupted: the program was closed before this triage "
+        "finished.', finished_utc = ? WHERE status = 'running'",
+        (utc_now_iso(),))
+    conn.commit()
+    return cur.rowcount
 
 
 def fail_orphaned_traces() -> int:
