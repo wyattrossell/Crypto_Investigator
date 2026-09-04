@@ -5,6 +5,43 @@ changes, dependencies, and known limitations, per the project's iteration
 directives. The complete program listing for each version is generated at
 `docs/listings/v{version}-full-listing.txt`.
 
+## v1.0.0 — 2026-09-04 (First multi-agency release: documentation)
+
+### Functionality
+- **Documentation set for distribution.** New `docs/setup-guide.md`
+  (for agency IT: what is installed, install options, where data lives
+  and how to relocate it, first-run configuration, the complete list of
+  outbound hosts for firewall rules, every optional key and mode with
+  where to obtain it, security notes for reviewers, upgrading, building
+  and signing a release, troubleshooting) and `docs/investigator-guide.md`
+  (the workflow, how to read findings and exit points, the address
+  panel tools, exports, freeze letters, watches/flags/packs, bulk
+  triage, IC3, the AI assistant, the honesty rules, a glossary).
+  `docs/release-checklist.md` records the release procedure. README
+  rewritten for the public repository with screenshots
+  (`docs/images/`).
+- **Technical Validation Document and Overview brought up to date**
+  with everything added since v0.10: multi-backend data sources, all
+  label and scam-report sources, agency and partner designations,
+  clustering, the new findings, the new outputs, DPAPI key storage,
+  Tron support, and the four label downloads. Several statements in
+  the previous versions' validation documents were stale (e.g. "no
+  wallet clustering", "keys stored unencrypted", "Tron not traceable");
+  from this version the document matches the program.
+- Version 1.0.0 marks the first build handed to other agencies. No
+  program behaviour changed in this release.
+
+### Dependencies
+- Unchanged.
+
+### Known limitations / problems detected
+1. The repository ships without a LICENSE file until the owning agency
+   chooses one; the installer and listing pick it up automatically once
+   added.
+2. Builds are unsigned (SmartScreen warns on first run) until the agency
+   signs them.
+3. v0.14.0 limitations still apply.
+
 ## v0.14.0 — 2026-09-04 (Data sources: keyed Bitcoin, Alchemy, self-hosted nodes, live rate-limit counters)
 
 ### Functionality

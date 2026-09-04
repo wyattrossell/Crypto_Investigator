@@ -170,17 +170,30 @@ def build_validation(pdf_path: Path, generated: str, listing_rel: str,
         "traces, settings, labels, the immutable HTTP evidence cache, "
         "the chain-of-custody log, and IC3 worksheet drafts.",
         "• <b>app/providers/</b> - data acquisition clients (Bitcoin via "
-        "the Esplora API, Ethereum via Etherscan V2) built on a shared "
-        "base class that enforces cache, throttle, retry and custody "
-        "logging for every request.",
-        "• <b>app/labels/</b> - attribution store: OFAC SDN parsing and "
-        "the bundled community exchange list.",
-        "• <b>app/tracing/</b> - input format detection and the forward "
-        "tracing engine.",
-        "• <b>app/prices.py</b> - USD context values from CoinGecko "
-        "(spot ticker and historical daily prices).",
-        "• <b>app/report/</b> - the court-ready trace report and the IC3 "
-        "complaint worksheet (PDF generation).",
+        "the Esplora API in pool / keyed / self-hosted modes; Ethereum "
+        "via Blockscout, Routescan, Etherscan V2 or Alchemy; Tron via "
+        "TronGrid) built on a shared base class that enforces cache, "
+        "throttle, retry, custody logging and per-provider counters for "
+        "every request (GET and JSON-RPC POST).",
+        "• <b>app/labels/</b> - attribution store: OFAC SDN parsing, "
+        "GraphSense TagPack, ScamSniffer and eth-labels importers, the "
+        "bundled seed list, the agency's own flags, and partner flag "
+        "packs (export/import with integrity hash).",
+        "• <b>app/intel/</b> - on-demand Chainabuse lookups (budgeted, "
+        "cached), plain-language wallet summaries (no AI) and bulk "
+        "address triage.",
+        "• <b>app/tracing/</b> - input format detection, the forward/"
+        "backward tracing engine and Bitcoin common-input clustering.",
+        "• <b>app/prices.py</b> - USD context values (CoinGecko with "
+        "keyless Kraken/Coinbase fallbacks).",
+        "• <b>app/report/</b> - the court-ready trace report, freeze/"
+        "preservation letters, affidavit and traceroute text, the "
+        "evidence package, and the IC3 worksheet (PDF generation).",
+        "• <b>app/scheduler.py</b> - wallet-watch checks and label "
+        "auto-refresh; <b>app/secretstore.py</b> - DPAPI encryption of "
+        "keys; <b>app/assistant.py</b> - the optional AI assistant with "
+        "its audit log; <b>app/launcher.py</b> - the console-free tray "
+        "launcher.",
         "• <b>app/ic3.py</b> - IC3 complaint worksheet data model and "
         "trace prefill.",
         "• <b>app/static/</b> - the browser interface (plain HTML/JS/CSS; "
@@ -189,32 +202,50 @@ def build_validation(pdf_path: Path, generated: str, listing_rel: str,
     ])
 
     _add(story, styles, "4. Data sources", [
-        "• <b>Bitcoin:</b> Esplora-compatible REST API - "
-        f"{config.DEFAULT_BITCOIN_API_BASE} (mempool.space) and "
-        f"{config.FALLBACK_BITCOIN_API_BASE} (Blockstream), which serve "
-        "the identical API. Requests alternate between the two hosts for "
-        "throughput; the custody log records the exact host and URL of "
-        "every pull, and immutable records share one evidence-cache "
-        "entry regardless of host. No API key. A custom endpoint set in "
-        "Settings disables the alternation.",
-        "• <b>Ethereum and ERC-20 tokens:</b> Etherscan V2 API "
-        f"({config.DEFAULT_ETHERSCAN_API_BASE}), free user-supplied key. "
-        "The key is excluded from logged URLs and cache keys, so custody "
-        "logs are shareable and re-runnable by another analyst using "
-        "their own key.",
+        "• <b>Bitcoin:</b> the Esplora REST API. Default 'pool' mode "
+        f"rotates {config.DEFAULT_BITCOIN_API_BASE}, "
+        f"{config.FALLBACK_BITCOIN_API_BASE} and a community host, which "
+        "serve the identical API; 'keyed' mode uses the Blockstream "
+        "Explorer API with agency credentials; 'custom' mode uses a "
+        "single agency-run node. The custody log records the exact host "
+        "and URL of every pull; immutable records share one evidence-"
+        "cache entry regardless of host.",
+        "• <b>Ethereum and ERC-20 tokens:</b> keyless Blockscout "
+        "(default) or Routescan; with a free key, Etherscan V2 "
+        f"({config.DEFAULT_ETHERSCAN_API_BASE}) or Alchemy (JSON-RPC, "
+        "including internal transactions); or an agency-run Blockscout. "
+        "Keys are excluded from logged URLs and cache keys, and Alchemy "
+        "calls are logged as key-free descriptors, so custody logs are "
+        "shareable and re-runnable by another analyst using their own "
+        "key.",
+        "• <b>Tron and TRC-20 tokens:</b> the official TronGrid API "
+        f"({config.DEFAULT_TRONGRID_API_BASE}); keyless at a low rate, "
+        "a free key raises the limit (sent as a header, never logged).",
         "• <b>Sanctions attribution:</b> the official US Treasury OFAC "
         f"SDN list, downloaded live from {config.OFAC_SDN_XML_URL} and "
         "parsed for digital-currency addresses. Imported at HIGH "
         "confidence (official government source). Never cached - each "
         "refresh records which snapshot (by hash) was used.",
-        "• <b>Exchange attribution:</b> a small bundled list of publicly "
-        "documented exchange wallets (data/labels/"
-        "exchange_labels_seed.json), derived from public block-explorer "
-        "entity tags. Imported at MEDIUM confidence and marked "
-        "unverified. The tool states in every report that absence of an "
-        "exchange label is not evidence of absence.",
+        "• <b>Exchange / mixer attribution:</b> GraphSense TagPacks "
+        "(MIT community packs, hundreds of thousands of addresses, pack "
+        "provenance and last-modified date on every label), Etherscan "
+        "public name tags via the MIT eth-labels dataset (Ethereum), and "
+        "a small bundled seed list. All imported at MEDIUM confidence "
+        "and marked as community/explorer tags, not official records. "
+        "Every report states that absence of an exchange label is not "
+        "evidence of absence.",
+        "• <b>Scam-report corroboration:</b> the ScamSniffer public "
+        "drainer blacklist, Etherscan 'Take Action'/exploit tags, and "
+        "on-demand Chainabuse (TRM Labs) lookups. These are third-party, "
+        "unverified reports: raised as corroborating findings, never as "
+        "stopping points or proof.",
+        "• <b>Agency designations:</b> the agency's own wallet flags "
+        "(presented everywhere as the agency's own) and partner "
+        "agencies' flag packs (a separate source, always named as the "
+        "originating agency's designation; integrity-hashed on import).",
         "• <b>USD prices (context only):</b> CoinGecko public API "
-        f"({config.COINGECKO_API_BASE}). Not evidence; see section 8.",
+        f"({config.COINGECKO_API_BASE}) with keyless Kraken and Coinbase "
+        "daily-candle fallbacks. Not evidence; see section 8.",
     ])
 
     _add(story, styles, "5. Acquisition integrity (chain of custody)", [
@@ -343,7 +374,14 @@ def build_validation(pdf_path: Path, generated: str, listing_rel: str,
         "BUSY SERVICE (probably nameable via public block-explorer tags); "
         "CONSOLIDATION POINT (two or more traced branches merging - a "
         "collection wallet, useful for linking victims); OFAC-SANCTIONED "
-        "or MIXER contact; and UNRESOLVED TRAIL EDGES (re-trace "
+        "or MIXER contact; contact with a wallet FLAGGED BY THIS AGENCY "
+        "(cross-case link) or FLAGGED BY A PARTNER AGENCY (imported "
+        "pack, named as that agency's designation); contact with a "
+        "PUBLICLY REPORTED SCAM ADDRESS (corroboration, not proof); a "
+        "Bitcoin ADDRESS CLUSTER (several traced addresses presumed one "
+        "wallet under the common-input-ownership heuristic, CoinJoin-"
+        "like transactions excluded, evidencing transactions listed, "
+        "MEDIUM or LOW confidence); and UNRESOLVED TRAIL EDGES (re-trace "
         "candidates). Each finding carries the underlying facts, its "
         "heuristic basis where applicable, and a recommended next step.",
         "A DISPOSITION OF FUNDS table accounts for the traced value "
@@ -415,6 +453,18 @@ def build_validation(pdf_path: Path, generated: str, listing_rel: str,
         "complaint.ic3.gov, prefilled from trace data where possible. "
         "IC3 offers no electronic submission; the worksheet is "
         "transcribed by a person, and the tool says so.",
+        "• <b>Freeze / preservation request letters (PDF, DRAFT-"
+        "watermarked)</b> - per receiving address, with the funding "
+        "transactions as Attachment A, addressed to the attributed "
+        "custodian or, for traced USDT/USDC at an unattributed wallet, "
+        "to the token issuer; counsel review required before service.",
+        "• <b>Affidavit methodology draft (text)</b> - numbered "
+        "paragraphs describing sources, method, scope, attribution "
+        "framework, records integrity and (when applied) clustering.",
+        "• <b>Evidence package (ZIP)</b> - all of the above for one trace "
+        "plus a manifest listing the SHA-256 of every packaged file.",
+        "• <b>Map image (PNG)</b>, <b>bulk-triage table (CSV)</b>, "
+        "<b>case export (JSON)</b> and <b>flag pack (JSON, hashed)</b>.",
     ])
 
     _add(story, styles, "10. Visualization integrity", [
@@ -438,19 +488,26 @@ def build_validation(pdf_path: Path, generated: str, listing_rel: str,
         f"{config.MAX_OUTGOING_TXS_PER_ADDRESS} outgoing transactions "
         "per address are examined; heavy later activity can conceal an "
         "older spend (a date-window filter is roadmapped).",
-        "• No Bitcoin wallet clustering or change-address detection "
-        "beyond same-address change: a suspect's own change to a fresh "
-        "address is followed like any other movement.",
+        "• Bitcoin clustering uses only the common-input-ownership "
+        "heuristic over the transactions the trace parsed; change "
+        "outputs to fresh addresses are otherwise followed like any "
+        "other movement, and clusters are inferences with known failure "
+        "modes (CoinJoin, custodial batching).",
         "• Funds entering smart contracts (swaps, bridges, mixers) are "
         "flagged and not traversed; no continuity is invented.",
-        "• The bundled exchange label list is small; absence of an exit "
-        "finding is not evidence of absence.",
+        "• Exchange attribution comes from public community/explorer "
+        "packs; per-customer deposit addresses are unlisted, so absence "
+        "of an exit finding is not evidence of absence.",
         "• USD figures are daily-price approximations (section 8).",
-        "• API keys are stored unencrypted in the local database; disk "
-        "encryption on the evidence machine is recommended.",
-        "• Tron, Monero and Litecoin inputs are recognised and "
-        "explained but not traceable in this version (Monero is not "
-        "traceable on-chain by design).",
+        "• API keys are encrypted at rest with Windows DPAPI (user-"
+        "scoped); disk encryption on the evidence machine is still "
+        "recommended for the case database itself.",
+        "• Monero and Litecoin inputs are recognised and explained but "
+        "not traceable in this version (Monero is not traceable "
+        "on-chain by design). Tron focus transactions are not supported.",
+        "• Third-party scam reports and partner flags are unverified "
+        "corroboration; the tool labels them so and never treats them "
+        "as stopping points.",
     ])
 
     _add(story, styles, "12. Verification procedures for reviewers", [
@@ -539,15 +596,22 @@ def build_overview(pdf_path: Path, generated: str) -> None:
         "money hop by hop (breadth-first, up to a chosen depth), "
         "recording every address and movement.",
         "3. Each address it reaches is checked against the official "
-        "OFAC sanctions list and a list of known exchange wallets, and "
-        "classified: pass-through, exchange (an exit point), "
-        "sanctioned, mixer, smart contract, or busy service.",
+        "OFAC sanctions list, public exchange/mixer label packs, scam "
+        "lists, the agency's own flags and partner agencies' flag "
+        "packs, and classified: pass-through, exchange (an exit point), "
+        "sanctioned, mixer, smart contract, or busy service. Bitcoin "
+        "addresses spent together are grouped into clusters (a stated "
+        "heuristic).",
         "4. Results appear as a left-to-right money-flow map (victim "
         "on the left, exits on the right) with plain-language "
         "explanations on every element, plus ranked exit-point cards.",
-        "5. One click produces the court-ready PDF report, the "
-        "chain-of-custody CSV, the raw JSON, and an FBI IC3 complaint "
-        "worksheet prefilled from the trace.",
+        "5. One click produces the evidence package: court-ready PDF "
+        "report, chain-of-custody CSV, raw JSON, DRAFT affidavit "
+        "methodology, per-exit traceroutes and DRAFT freeze letters "
+        "with a SHA-256 manifest - plus an FBI IC3 complaint worksheet "
+        "prefilled from the trace. Wallets can be watched for movement, "
+        "flagged across cases, bulk-triaged, and checked against "
+        "Chainabuse on demand.",
         "Every single network request the tool makes is logged with its "
         "exact URL, UTC time and a SHA-256 hash of the response, so an "
         "independent analyst can re-run and verify any piece of the "
@@ -580,9 +644,9 @@ def build_overview(pdf_path: Path, generated: str) -> None:
         "redirected (e.g. to an encrypted volume) with a data-location.txt "
         "file next to the program.",
         "<b>First-time setup (Settings button):</b> no accounts are "
-        "required. Run the three label downloads once (OFAC sanctions "
-        "list, exchange label packs, scam blacklist); they refresh "
-        "themselves afterwards. Fill in the agency letterhead if freeze "
+        "required. Run the four label downloads once (OFAC sanctions "
+        "list, exchange label packs, scam blacklist, Ethereum name "
+        "tags); they refresh themselves afterwards. Fill in the agency letterhead if freeze "
         "requests will be generated. Optional free API keys only raise "
         "rate limits.",
         "<b>Workflow:</b> Step 1 create/pick a case → Step 2 paste the "
@@ -601,6 +665,10 @@ def build_overview(pdf_path: Path, generated: str) -> None:
         "• FBI IC3 complaint worksheet (PDF) mirroring the official "
         "form at complaint.ic3.gov, prefilled with the traced "
         "payments.",
+        "• DRAFT freeze / preservation request letters, affidavit "
+        "methodology draft, per-exit traceroutes, map image, evidence "
+        "ZIP with SHA-256 manifest, bulk-triage CSV, flag packs for "
+        "partner agencies.",
     ])
 
     _add(story, styles, "Where to look next", [
