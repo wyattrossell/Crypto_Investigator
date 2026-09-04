@@ -14,7 +14,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 APP_NAME = "Crypto Investigator"
-APP_VERSION = "0.13.0"
+APP_VERSION = "0.14.0"
 
 # The tool binds to localhost ONLY. Evidence must not be exposed on a network
 # interface without a deliberate deployment decision (Phase 3+).
@@ -166,8 +166,30 @@ DEFAULT_BLOCKSCOUT_API_BASE = "https://eth.blockscout.com/api"
 # Blockscout misbehaves.
 DEFAULT_ROUTESCAN_API_BASE = ("https://api.routescan.io/v2/network/mainnet"
                               "/evm/1/etherscan/api")
+# Alchemy (free tier 30M compute units/month, 25 req/s; verified
+# 2026-09-04): JSON-RPC plus alchemy_getAssetTransfers, which returns an
+# address's external, INTERNAL and token transfers with block timestamps
+# in one call (120 CU). The API key is part of the URL; it is stripped
+# from every custody-logged descriptor.
+ALCHEMY_API_BASE = "https://eth-mainnet.g.alchemy.com/v2/"
+ALCHEMY_TRANSFER_CATEGORIES = ("external", "internal", "erc20")
 ETHEREUM_API_MODE_AUTO = "auto"
-ETHEREUM_API_MODES = ("auto", "etherscan", "blockscout", "routescan")
+ETHEREUM_API_MODES = ("auto", "alchemy", "etherscan", "blockscout",
+                      "routescan")
+
+# Bitcoin backend modes:
+#   pool    - round-robin over the public Esplora hosts (default, keyless)
+#   keyed   - Blockstream Explorer API (enterprise.blockstream.info) with
+#             OAuth client credentials; free tier 500k requests/month
+#             (verified 2026-09-04: token from login.blockstream.com,
+#             Bearer header, tokens expire after 300 s)
+#   custom  - a single self-hosted Esplora/mempool instance (the
+#             'bitcoin_api_base' setting), no public rate limit
+BITCOIN_API_MODES = ("pool", "keyed", "custom")
+BLOCKSTREAM_ENTERPRISE_API_BASE = "https://enterprise.blockstream.info/api"
+BLOCKSTREAM_TOKEN_URL = ("https://login.blockstream.com/realms/"
+                         "blockstream-public/protocol/openid-connect/token")
+BLOCKSTREAM_TOKEN_REFRESH_SECONDS = 240      # tokens last 300 s
 
 # TronGrid (official Tron API). Works keyless at a low rate; a free API key
 # (Settings screen) raises the limit and is sent as a header, never in
@@ -294,6 +316,10 @@ MIN_REQUEST_INTERVAL_SECONDS = {
     "trongrid": 1.1,     # documented anonymous tier is 1 req/s
     "trongrid-keyed": 0.2,   # free key allows 15 req/s; stay well under
     "chainabuse": 1.0,   # on-demand lookups; the monthly budget is the limit
+    "alchemy": 0.06,     # free tier 25 req/s; stay well under
+    "blockstream-enterprise": 0.15,   # keyed; monthly quota is the limit
+    "esplora-custom": 0.02,           # self-hosted: no public limit
+    "blockscout-custom": 0.02,        # self-hosted Blockscout
     "eth-labels": 0.5,   # raw.githubusercontent.com CSV download
     "blockscout": 0.5,   # keyless tier is 300 req/min; stay well under
     "routescan": 0.6,    # keyless tier is 2 req/s, 10k/day
@@ -432,7 +458,8 @@ LABEL_AUTOREFRESH_DAYS = {
 # value reads back empty and must be re-entered - documented behaviour.
 SECRET_SETTING_KEYS = ("etherscan_api_key", "coingecko_api_key",
                        "trongrid_api_key", "ai_api_key",
-                       "chainabuse_api_key")
+                       "chainabuse_api_key", "alchemy_api_key",
+                       "blockstream_client_secret")
 
 # ---------------------------------------------------------------------------
 # Optional AI assistant (OFF by default; nothing is sent anywhere until the
@@ -459,6 +486,167 @@ AI_REQUEST_TIMEOUT_SECONDS = 240.0
 AI_MAX_CONTEXT_CHARS = 60_000
 AI_MAX_CONTEXT_EDGES = 250
 AI_MAX_CONTEXT_NODES = 150
+
+# ---------------------------------------------------------------------------
+# Data-source catalogue (drives the Data Sources panel). Every figure
+# below was read from the provider's own pricing/limits page on the date
+# in `verified`; prices change - the panel links to the live page.
+# ---------------------------------------------------------------------------
+
+DATA_SOURCE_CATALOG = [
+    {
+        "id": "bitcoin-pool", "chain": "Bitcoin",
+        "name": "Public Esplora pool (mempool.space, blockstream.info, "
+                "mempool.emzy.de)",
+        "providers": ["mempool.space", "blockstream.info", "mempool.emzy.de"],
+        "used_for": "Bitcoin addresses, transactions, activity",
+        "free": "Keyless; undisclosed per-IP limits (429s happen; the tool "
+                "backs off). Three hosts are rotated to spread load.",
+        "upgrade": "Switch Bitcoin mode to 'keyed' (Blockstream Explorer "
+                   "API) or 'custom' (your own node).",
+        "signup": "", "pricing": "https://mempool.space/docs/api",
+        "verified": "2026-08-31",
+    },
+    {
+        "id": "blockstream-enterprise", "chain": "Bitcoin",
+        "name": "Blockstream Explorer API (keyed)",
+        "providers": ["blockstream-enterprise"],
+        "used_for": "Bitcoin - same Esplora API, dedicated quota",
+        "free": "500,000 requests/month on the free tier (client ID + "
+                "secret from the Blockstream account console).",
+        "upgrade": "Paid tiers scale the quota; Enterprise is quoted at "
+                   "$3,000/month for unlimited calls.",
+        "signup": "https://help.blockstream.com/hc/en-us/categories/"
+                  "46544727955865-Blockstream-Explorer-API",
+        "pricing": "https://blockstream.info/explorer-api",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "esplora-custom", "chain": "Bitcoin",
+        "name": "Self-hosted Esplora / mempool instance",
+        "providers": ["esplora-custom"],
+        "used_for": "Bitcoin from the agency's own node - fully private, "
+                    "no external rate limit",
+        "free": "Runs on agency hardware (Bitcoin Core + electrs/Esplora "
+                "or a mempool instance, ~1 TB disk).",
+        "upgrade": "", "signup": "",
+        "pricing": "https://github.com/Blockstream/esplora",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "blockscout", "chain": "Ethereum",
+        "name": "Blockscout public instance (keyless)",
+        "providers": ["blockscout"],
+        "used_for": "Ethereum + ERC-20 (default when no key is set)",
+        "free": "300 requests/min per IP; no account. Internal "
+                "transactions not available on this path.",
+        "upgrade": "Add an Alchemy or Etherscan key.",
+        "signup": "", "pricing": "https://docs.blockscout.com/devs/apis/"
+                                 "requests-and-limits",
+        "verified": "2026-08-31",
+    },
+    {
+        "id": "routescan", "chain": "Ethereum",
+        "name": "Routescan (keyless backup)",
+        "providers": ["routescan"],
+        "used_for": "Ethereum + ERC-20 (drop-in when Blockscout misbehaves)",
+        "free": "2 requests/s, 10,000/day, keyless.",
+        "upgrade": "", "signup": "",
+        "pricing": "https://routescan.io/documentation/plans-and-limits/"
+                   "rate-limits",
+        "verified": "2026-08-31",
+    },
+    {
+        "id": "alchemy", "chain": "Ethereum",
+        "name": "Alchemy (free key)",
+        "providers": ["alchemy"],
+        "used_for": "Ethereum + ERC-20 INCLUDING internal transactions, "
+                    "with timestamps, in one call per address",
+        "free": "30M compute units/month, 25 requests/s (a transfer "
+                "history call costs 120 CU: roughly 250,000 address "
+                "look-ups a month).",
+        "upgrade": "Pay-as-you-go $0.45 per 1M CU beyond the free tier "
+                   "(300 requests/s).",
+        "signup": "https://dashboard.alchemy.com/signup",
+        "pricing": "https://www.alchemy.com/pricing",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "etherscan", "chain": "Ethereum",
+        "name": "Etherscan V2 (free key)",
+        "providers": ["etherscan"],
+        "used_for": "Ethereum + ERC-20 + internal transactions",
+        "free": "3 calls/s, 100,000 calls/day with a free key.",
+        "upgrade": "Lite $49/mo (5/s, 100k/day); Standard $199/mo (10/s, "
+                   "200k/day); Advanced $299/mo (20/s, 500k/day); "
+                   "Professional $399/mo (30/s, 1M/day).",
+        "signup": "https://etherscan.io/register",
+        "pricing": "https://etherscan.io/apis",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "blockscout-custom", "chain": "Ethereum",
+        "name": "Self-hosted Blockscout",
+        "providers": ["blockscout-custom"],
+        "used_for": "Ethereum from an agency-run indexer - private, no "
+                    "external limit",
+        "free": "Runs on agency hardware (an archive node + Blockscout; "
+                "multi-TB). Point the Blockscout URL setting at it.",
+        "upgrade": "", "signup": "",
+        "pricing": "https://docs.blockscout.com/setup/deployment",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "trongrid", "chain": "Tron",
+        "name": "TronGrid (official)",
+        "providers": ["trongrid", "trongrid-keyed"],
+        "used_for": "Tron + TRC-20 USDT",
+        "free": "Keyless ~1 request/s; a free key raises this to 15 "
+                "requests/s with a daily quota set per plan in the "
+                "TronGrid console.",
+        "upgrade": "Developer/Team/Business plans and custom quotas are "
+                   "priced in the TronGrid console (trongrid.io/price); "
+                   "figures are not published on a static page.",
+        "signup": "https://www.trongrid.io", "pricing": "https://www.trongrid.io/price",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "prices", "chain": "USD pricing",
+        "name": "CoinGecko -> Kraken -> Coinbase (keyless fallbacks)",
+        "providers": ["coingecko", "kraken", "coinbase"],
+        "used_for": "USD context values at transaction dates",
+        "free": "CoinGecko Demo key: 10,000 calls/month, 100/min (365-day "
+                "history). Keyless Kraken (~2 years daily) and Coinbase "
+                "(BTC to 2015, ETH to 2016) need no account.",
+        "upgrade": "CoinGecko Basic $35/mo (100k credits, 300/min, 2-year "
+                   "history); Analyst $129/mo (500k, 500/min, 10-year).",
+        "signup": "https://www.coingecko.com/en/api/pricing",
+        "pricing": "https://www.coingecko.com/en/api/pricing",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "labels", "chain": "Labels",
+        "name": "OFAC SDN, GraphSense TagPacks, ScamSniffer, eth-labels",
+        "providers": ["ofac", "graphsense", "scamsniffer", "eth-labels"],
+        "used_for": "Sanctions and exchange/mixer/scam attribution",
+        "free": "All free public downloads; refreshed automatically once "
+                "downloaded.",
+        "upgrade": "", "signup": "", "pricing": "",
+        "verified": "2026-09-04",
+    },
+    {
+        "id": "chainabuse", "chain": "Scam reports",
+        "name": "Chainabuse (TRM Labs)",
+        "providers": ["chainabuse"],
+        "used_for": "Public scam reports per address (on demand)",
+        "free": "10 lookups/month with a free key.",
+        "upgrade": "Law-enforcement partner tier: free for verified "
+                   "agencies, 5,000 calls/hour, private report data.",
+        "signup": "https://www.chainabuse.com",
+        "pricing": "https://www.chainabuse.com/partner-contact",
+        "verified": "2026-09-04",
+    },
+]
 
 # Confidence levels attached to every attribution the tool makes.
 CONFIDENCE_HIGH = "high"        # official list (OFAC) or multi-source match

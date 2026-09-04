@@ -97,6 +97,11 @@ class SettingsUpdate(BaseModel):
     trongrid_api_key: str | None = None
     chainabuse_api_key: str | None = None
     chainabuse_tier: str | None = None         # free | partner
+    alchemy_api_key: str | None = None
+    blockstream_client_id: str | None = None
+    blockstream_client_secret: str | None = None
+    bitcoin_api_mode: str | None = None        # pool | keyed | custom
+    blockscout_api_base: str | None = None     # self-hosted Blockscout URL
     bitcoin_api_base: str | None = None
     etherscan_api_base: str | None = None
     ethereum_api_mode: str | None = None       # auto | etherscan | blockscout
@@ -124,6 +129,7 @@ class SettingsUpdate(BaseModel):
 PLAIN_SETTING_KEYS = (
     "bitcoin_api_base", "etherscan_api_base", "ethereum_api_mode",
     "watch_interval_minutes", "labels_autorefresh", "chainabuse_tier",
+    "bitcoin_api_mode", "blockstream_client_id", "blockscout_api_base",
     "ai_provider", "ai_model", "ai_base_url", "ai_workspace_id",
     "agency_name", "agency_unit", "agency_address", "agency_phone",
     "officer_name", "officer_title", "officer_badge", "officer_email",
@@ -197,6 +203,13 @@ def get_settings():
             masked(database.get_setting("chainabuse_api_key")),
         "chainabuse_tier": database.get_setting("chainabuse_tier", "free"),
         "chainabuse_status": chainabuse.status(),
+        "alchemy_api_key_masked":
+            masked(database.get_setting("alchemy_api_key")),
+        "blockstream_client_id": database.get_setting("blockstream_client_id"),
+        "blockstream_client_secret_masked":
+            masked(database.get_setting("blockstream_client_secret")),
+        "bitcoin_api_mode": database.get_setting("bitcoin_api_mode", "pool"),
+        "blockscout_api_base": database.get_setting("blockscout_api_base", ""),
         "ai_api_key_masked":
             masked(database.get_setting("ai_api_key")),
         "ai_provider": database.get_setting("ai_provider", ""),
@@ -232,13 +245,100 @@ def update_settings(body: SettingsUpdate):
             and body.chainabuse_tier.strip() not in config.CHAINABUSE_TIERS:
         raise HTTPException(status_code=400,
                             detail="Chainabuse tier must be free or partner.")
+    if body.bitcoin_api_mode is not None and body.bitcoin_api_mode.strip() \
+            and body.bitcoin_api_mode.strip() not in config.BITCOIN_API_MODES:
+        raise HTTPException(status_code=400,
+                            detail="Bitcoin mode must be pool, keyed or custom.")
+    if body.ethereum_api_mode is not None and body.ethereum_api_mode.strip() \
+            and body.ethereum_api_mode.strip() not in config.ETHEREUM_API_MODES:
+        raise HTTPException(status_code=400,
+                            detail="Unknown Ethereum data-source mode.")
     for field_name in ("etherscan_api_key", "coingecko_api_key",
                        "trongrid_api_key", "ai_api_key",
-                       "chainabuse_api_key") + PLAIN_SETTING_KEYS:
+                       "chainabuse_api_key", "alchemy_api_key",
+                       "blockstream_client_secret") + PLAIN_SETTING_KEYS:
         value = getattr(body, field_name)
         if value is not None:
             database.set_setting(field_name, value.strip())
     return {"ok": True}
+
+
+@app.get("/api/datasources")
+def datasources():
+    """The Data Sources panel: every provider with its tier, whether it is
+    configured/active, and live counters for this run of the program."""
+    from app.providers.base import ProviderStats
+    stats = ProviderStats.snapshot()
+    etherscan_key = bool(database.get_setting("etherscan_api_key"))
+    alchemy_key = bool(database.get_setting("alchemy_api_key"))
+    eth_mode = database.get_setting("ethereum_api_mode",
+                                    config.ETHEREUM_API_MODE_AUTO)
+    if eth_mode == config.ETHEREUM_API_MODE_AUTO:
+        eth_active = ("alchemy" if alchemy_key else
+                      "etherscan" if etherscan_key else "blockscout")
+    else:
+        eth_active = eth_mode
+    if eth_active == "alchemy" and not alchemy_key:
+        eth_active = "blockscout"
+    if eth_active == "blockscout" and database.get_setting(
+            "blockscout_api_base", "").strip():
+        eth_active = "blockscout-custom"
+    btc_mode = database.get_setting("bitcoin_api_mode", "pool")
+    keyed_ok = bool(database.get_setting("blockstream_client_id")) and \
+        bool(database.get_setting("blockstream_client_secret"))
+    btc_active = ("blockstream-enterprise" if btc_mode == "keyed" and keyed_ok
+                  else "esplora-custom" if btc_mode == "custom"
+                  else "bitcoin-pool")
+    configured = {
+        "blockstream-enterprise": keyed_ok,
+        "esplora-custom": btc_mode == "custom",
+        "alchemy": alchemy_key,
+        "etherscan": etherscan_key,
+        "blockscout-custom": bool(database.get_setting("blockscout_api_base",
+                                                       "").strip()),
+        "trongrid": bool(database.get_setting("trongrid_api_key")),
+        "prices": bool(database.get_setting("coingecko_api_key")),
+        "chainabuse": bool(database.get_setting("chainabuse_api_key")),
+    }
+    active = {btc_active, eth_active, "trongrid", "prices", "labels",
+              "chainabuse"}
+    rows = []
+    for entry in config.DATA_SOURCE_CATALOG:
+        totals = {f: 0 for f in ProviderStats.FIELDS}
+        last_error = None
+        last_activity = None
+        for provider in entry["providers"]:
+            counters = stats.get(provider)
+            if not counters:
+                continue
+            for field in ProviderStats.FIELDS:
+                totals[field] += counters.get(field, 0)
+            if counters.get("last_error"):
+                last_error = counters["last_error"]
+            last_activity = max(filter(None, [last_activity,
+                                              counters.get("last_activity_utc")]),
+                                default=None)
+        totals["throttle_wait_s"] = round(totals["throttle_wait_s"], 1)
+        row = dict(entry)
+        row["configured"] = configured.get(entry["id"], True)
+        row["active"] = entry["id"] in active
+        row["stats"] = totals
+        row["last_error"] = last_error
+        row["last_activity_utc"] = last_activity
+        rows.append(row)
+    notes = []
+    if btc_mode == "keyed" and not keyed_ok:
+        notes.append("Bitcoin mode is 'keyed' but the Blockstream client "
+                     "ID/secret are missing - the public pool is being used.")
+    if eth_mode == "alchemy" and not alchemy_key:
+        notes.append("Ethereum mode is 'alchemy' but no Alchemy key is set - "
+                     "keyless Blockscout is being used.")
+    return {"sources": rows, "bitcoin_mode": btc_mode,
+            "ethereum_mode": eth_mode, "ethereum_active": eth_active,
+            "bitcoin_active": btc_active, "notes": notes,
+            "session_started_note": "Counters cover this run of the program "
+                                    "only; the chain-of-custody log is the "
+                                    "permanent record."}
 
 
 @app.post("/api/labels/refresh-ofac")

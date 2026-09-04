@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 
 from app import config, prices
 from app.labels import store as label_store
-from app.providers.base import FetchMemo, ProviderError
+from app.providers.base import FetchMemo, ProviderError, ProviderStats
 from app.providers.bitcoin import BitcoinProvider
 from app.providers.ethereum import EthereumProvider
 from app.providers.tron import TronProvider
@@ -415,6 +415,7 @@ class ForwardTrace:
         # otherwise every outgoing movement from the wallet is followed.
         # The frontier is value-ordered: biggest traced movement first.
         queue = _ValueOrderedFrontier()
+        self._stats_before = ProviderStats.snapshot()
         self._start_prefetch_pool()
         victim = label_store.normalise_address(self.start_input, self.chain)
         victim_node = self._ensure_node(victim, depth=0)
@@ -570,7 +571,10 @@ class ForwardTrace:
             self.warnings.append(f"USD valuation skipped ({exc}); amounts "
                                  f"are shown in crypto units only.")
 
-        return self._build_result(victim, focus_txid, max_depth)
+        result = self._build_result(victim, focus_txid, max_depth)
+        result["data_sources"] = ProviderStats.delta(
+            getattr(self, "_stats_before", {}))
+        return result
 
     # ------------------------------------------------------------- internals
 

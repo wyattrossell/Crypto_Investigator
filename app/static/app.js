@@ -755,6 +755,7 @@ function renderResults(traceId, result, traceRow) {
   $("results-empty").classList.add("hidden");
   $("results").classList.remove("hidden");
   renderResultsHead(traceId, result, traceRow);
+  renderDataSourceLine(result);
   if (String(location.hash) !== `#trace=${traceId}`) {
     history.replaceState(null, "", `#trace=${traceId}`);
   }
@@ -2702,6 +2703,18 @@ async function openSettings() {
         ? `${cs.calls_used} of ${cs.monthly_budget} lookups used in ${cs.period}; ${cs.cached_addresses} addresses cached`
         : `${cs.calls_used} lookups this month; ${cs.cached_addresses} addresses cached`)
     : "";
+  $("setting-bitcoin-mode").value = settings.bitcoin_api_mode || "pool";
+  $("setting-blockstream-id").value = settings.blockstream_client_id || "";
+  $("setting-blockstream-secret").value = "";
+  $("blockstream-secret-state").textContent =
+    settings.blockstream_client_secret_masked
+      ? `Current secret: ${settings.blockstream_client_secret_masked}` : "";
+  $("setting-alchemy-key").value = "";
+  $("alchemy-key-state").textContent = settings.alchemy_api_key_masked
+    ? `Current key: ${settings.alchemy_api_key_masked}` : "No key yet.";
+  $("setting-blockscout-base").value = settings.blockscout_api_base || "";
+  updateBitcoinModeHints();
+  renderDataSources();
   $("setting-btc-base").value = settings.bitcoin_api_base;
   $("setting-eth-base").value = settings.etherscan_api_base;
   $("setting-ethereum-mode").value = settings.ethereum_api_mode || "auto";
@@ -2753,6 +2766,13 @@ async function saveSettings() {
   if (tronKey) body.trongrid_api_key = tronKey;
   const caKey = $("setting-chainabuse-key").value.trim();
   if (caKey) body.chainabuse_api_key = caKey;
+  const alKey = $("setting-alchemy-key").value.trim();
+  if (alKey) body.alchemy_api_key = alKey;
+  const bsSecret = $("setting-blockstream-secret").value.trim();
+  if (bsSecret) body.blockstream_client_secret = bsSecret;
+  body.blockstream_client_id = $("setting-blockstream-id").value.trim();
+  body.bitcoin_api_mode = $("setting-bitcoin-mode").value;
+  body.blockscout_api_base = $("setting-blockscout-base").value.trim();
   body.chainabuse_tier = $("setting-chainabuse-tier").value;
   body.ai_provider = $("setting-ai-provider").value;
   body.ai_model = $("setting-ai-model").value;
@@ -2772,6 +2792,75 @@ const AI_MODEL_PLACEHOLDERS = {
   openai: "e.g. gpt-5",
   custom: "your model's name on the endpoint (e.g. llama3.3)",
 };
+
+function updateBitcoinModeHints() {
+  const keyed = $("setting-bitcoin-mode").value === "keyed";
+  $("blockstream-fields").classList.toggle("hidden", !keyed);
+}
+
+const fmtStat = (n) => (n || 0).toLocaleString();
+
+async function renderDataSources() {
+  const panel = $("datasources-panel");
+  let data;
+  try { data = await api("/api/datasources"); }
+  catch (error) { panel.innerHTML = `<p class="muted">${error.message}</p>`; return; }
+  const rows = data.sources.map((src) => {
+    const st = src.stats || {};
+    const status = src.active
+      ? `<span class="pill green">active</span>`
+      : (src.configured ? `<span class="pill blue">configured</span>`
+                        : `<span class="pill">not configured</span>`);
+    const links = [
+      src.signup ? `<a href="${src.signup}" target="_blank">sign up</a>` : "",
+      src.pricing ? `<a href="${src.pricing}" target="_blank">limits &amp; pricing</a>` : "",
+    ].filter(Boolean).join(" · ");
+    const counters = st.requests || st.cache_hits
+      ? `${fmtStat(st.requests)} live · ${fmtStat(st.cache_hits)} cached` +
+        (st.throttle_wait_s ? ` · waited ${st.throttle_wait_s}s` : "") +
+        (st.rate_limited ? ` · <b>${st.rate_limited} rate-limited</b>` : "") +
+        (st.server_errors ? ` · ${st.server_errors} server errors` : "") +
+        (st.failures ? ` · <b>${st.failures} failed</b>` : "")
+      : "<span class='muted'>no calls yet</span>";
+    return `<tr class="${src.active ? "active" : ""}">
+      <td><span class="ds-name">${src.name}</span>
+        <span class="ds-sub">${src.chain} · ${src.used_for}</span></td>
+      <td>${status}</td>
+      <td>${src.free}<span class="ds-sub">${src.upgrade || ""}</span>
+        <span class="ds-sub">${links}${links ? " · " : ""}verified ${src.verified}</span></td>
+      <td><span class="ds-stat">${counters}</span>
+        ${src.last_error ? `<span class="ds-err" title="${src.last_error}">last error: ${
+          src.last_error.slice(0, 70)}…</span>` : ""}</td></tr>`;
+  }).join("");
+  panel.innerHTML = `<div style="overflow-x:auto"><table class="ds-table">
+    <tr><th>Source</th><th>Status</th><th>Free tier · upgrades</th>
+        <th>This session</th></tr>${rows}</table></div>
+    ${(data.notes || []).map((n) => `<div class="warning-item">${n}</div>`).join("")}
+    <p class="hint">${data.session_started_note}</p>`;
+}
+
+function renderDataSourceLine(result) {
+  const head = $("results-head");
+  if (!head) return;
+  const old = document.getElementById("datasource-line");
+  if (old) old.remove();
+  const stats = result.data_sources || {};
+  const parts = Object.entries(stats).map(([name, st]) => {
+    let text = `<b>${name}</b> ${fmtStat(st.requests)} live`;
+    if (st.cache_hits) text += ` / ${fmtStat(st.cache_hits)} cached`;
+    if (st.throttle_wait_s) text += `, waited ${st.throttle_wait_s}s`;
+    if (st.rate_limited) text += `, ${st.rate_limited} rate-limited`;
+    if (st.failures) text += `, ${st.failures} failed`;
+    return text;
+  });
+  if (!parts.length) return;
+  const line = document.createElement("div");
+  line.id = "datasource-line";
+  line.className = "datasource-line";
+  line.innerHTML = "Data pulls for this trace: " + parts.join(" · ") +
+    " <span class='muted'>(every pull is in the chain-of-custody log)</span>";
+  head.insertAdjacentElement("afterend", line);
+}
 
 function updateAiSettingsHints() {
   const provider = $("setting-ai-provider").value;
@@ -2846,6 +2935,8 @@ document.addEventListener("DOMContentLoaded", () => {
     () => $("ai-log-dialog").close());
   $("setting-ai-provider").addEventListener("change",
     updateAiSettingsHints);
+  $("setting-bitcoin-mode").addEventListener("change",
+    updateBitcoinModeHints);
   $("btn-ic3-ai-draft").addEventListener("click", async () => {
     if (!ic3CaseId) return;
     $("btn-ic3-ai-draft").disabled = true;

@@ -390,28 +390,71 @@ prioritise and why?)"></textarea>
   <p class="hint"><b>No accounts are required.</b> Every chain traces with
     free keyless public APIs out of the box. The optional keys below only
     raise rate limits / reliability.</p>
-  <label class="field-label">Etherscan API key (optional — without one,
-    Ethereum uses the keyless Blockscout public API;
-    <a href="https://etherscan.io/apis" target="_blank">a free key</a>
-    raises limits)
-    <input id="setting-etherscan-key" placeholder="paste key (optional)">
-    <span id="etherscan-key-state" class="muted"></span>
-  </label>
-  <label class="field-label">Ethereum data source
-    <select id="setting-ethereum-mode">
-      <option value="auto">Automatic — Etherscan when a key is set,
-        keyless Blockscout otherwise (recommended)</option>
-      <option value="blockscout">Always Blockscout (keyless)</option>
-      <option value="routescan">Always Routescan (keyless backup)</option>
-      <option value="etherscan">Always Etherscan (needs key)</option>
+  <h3 class="dialog-subhead">Data sources</h3>
+  <p class="hint">Rate limits are the main thing that slows a trace. Each
+    agency registers its own keys (provider terms tie keys to an
+    organisation). The panel below shows every source, its tier, and live
+    counters for this run of the program.</p>
+  <div id="datasources-panel"></div>
+  <h3 class="dialog-subhead" style="margin-top:12px">Bitcoin</h3>
+  <label class="field-label">Bitcoin data source
+    <select id="setting-bitcoin-mode">
+      <option value="pool">Public Esplora pool — mempool.space,
+        blockstream.info, mempool.emzy.de (keyless; default)</option>
+      <option value="keyed">Blockstream Explorer API (keyed — 500k
+        requests/month free; needs client ID + secret)</option>
+      <option value="custom">Self-hosted node — a single Esplora/mempool
+        URL you run (no external limit)</option>
     </select>
   </label>
-  <label class="field-label">Bitcoin API endpoint
+  <div class="grid2" id="blockstream-fields">
+    <label class="field-label">Blockstream client ID
+      <input id="setting-blockstream-id" placeholder="client id"></label>
+    <label class="field-label">Blockstream client secret
+      <input id="setting-blockstream-secret" placeholder="paste secret">
+      <span id="blockstream-secret-state" class="muted"></span></label>
+  </div>
+  <label class="field-label">Bitcoin API endpoint (used by the self-hosted
+    mode; in pool mode it is the first host tried)
     <input id="setting-btc-base">
+  </label>
+  <h3 class="dialog-subhead" style="margin-top:12px">Ethereum</h3>
+  <label class="field-label">Ethereum data source
+    <select id="setting-ethereum-mode">
+      <option value="auto">Automatic — Alchemy if its key is set, else
+        Etherscan if its key is set, else keyless Blockscout (recommended)</option>
+      <option value="alchemy">Always Alchemy (needs key; includes internal
+        transactions)</option>
+      <option value="etherscan">Always Etherscan (needs key)</option>
+      <option value="blockscout">Always Blockscout (keyless, or your own
+        instance below)</option>
+      <option value="routescan">Always Routescan (keyless backup)</option>
+    </select>
+  </label>
+  <div class="grid2">
+    <label class="field-label">Alchemy API key (free —
+      <a href="https://dashboard.alchemy.com/signup" target="_blank">sign
+      up</a>; 30M compute units/month, 25 req/s; returns internal
+      transactions the keyless path lacks)
+      <input id="setting-alchemy-key" placeholder="paste key">
+      <span id="alchemy-key-state" class="muted"></span>
+    </label>
+    <label class="field-label">Etherscan API key (free —
+      <a href="https://etherscan.io/apis" target="_blank">get one</a>;
+      3 calls/s, 100k/day)
+      <input id="setting-etherscan-key" placeholder="paste key (optional)">
+      <span id="etherscan-key-state" class="muted"></span>
+    </label>
+  </div>
+  <label class="field-label">Self-hosted Blockscout URL (optional; the
+    Etherscan-compatible API base of your own instance, e.g.
+    https://blockscout.agency.local/api — used by the Blockscout mode)
+    <input id="setting-blockscout-base" placeholder="leave blank for the public instance">
   </label>
   <label class="field-label">Etherscan API endpoint
     <input id="setting-eth-base">
   </label>
+  <h3 class="dialog-subhead" style="margin-top:12px">Other keys</h3>
   <label class="field-label">CoinGecko API key (free “demo” key —
     <a href="https://www.coingecko.com/en/api" target="_blank">get one
     here</a>; optional, but makes USD pricing much more reliable)

@@ -24,9 +24,15 @@ Normalised movement dict (shared shape with the Ethereum provider):
 """
 
 import json
+import logging
+import time
+
+import httpx
 
 from app import config, database
-from app.providers.base import ProviderClient
+from app.providers.base import ProviderClient, ProviderError
+
+log = logging.getLogger("crypto_investigator.bitcoin")
 
 # Esplora returns address transactions in pages of 25.
 ESPLORA_PAGE_SIZE = 25
@@ -42,23 +48,89 @@ class BitcoinProvider(ProviderClient):
 
     def __init__(self, trace_id=None, memo=None):
         super().__init__(trace_id=trace_id, memo=memo)
-        # The endpoint is user-swappable (Settings screen) with a sane
-        # default. When the configured endpoint is one of the two known
-        # Esplora hosts, requests ROUND-ROBIN across both - they serve the
-        # identical API, which roughly doubles throughput (each host has
-        # its own rate-limit budget). A custom endpoint disables this.
+        # Three modes ('bitcoin_api_mode' setting):
+        #   pool   - round-robin over the known public Esplora hosts (each
+        #            has its own rate-limit budget); the default, keyless.
+        #   keyed  - Blockstream Explorer API with OAuth client credentials
+        #            (dedicated 500k/month free quota).
+        #   custom - one self-hosted Esplora/mempool instance from the
+        #            'bitcoin_api_base' setting (no public limit).
+        self.mode = database.get_setting("bitcoin_api_mode", "pool")
+        if self.mode not in config.BITCOIN_API_MODES:
+            self.mode = "pool"
+        self.mode_note = ""
         self.api_base = database.get_setting(
             "bitcoin_api_base", config.DEFAULT_BITCOIN_API_BASE).rstrip("/")
         known = {config.DEFAULT_BITCOIN_API_BASE.rstrip("/"),
                  config.FALLBACK_BITCOIN_API_BASE.rstrip("/")}
         known.update(base.rstrip("/")
                      for base in config.ESPLORA_EXTRA_BASES)
-        if self.api_base in known:
-            self.api_bases = [self.api_base] + \
-                sorted(known - {self.api_base})
-        else:
+        self._token_expires_at = 0.0
+        self.client_id = ""
+        self.client_secret = ""
+        if self.mode == "keyed":
+            self.client_id = database.get_setting("blockstream_client_id", "")
+            self.client_secret = database.get_setting(
+                "blockstream_client_secret", "")
+            if self.client_id and self.client_secret:
+                self.api_bases = [config.BLOCKSTREAM_ENTERPRISE_API_BASE]
+            else:
+                self.mode = "pool"
+                self.mode_note = ("Bitcoin mode 'keyed' selected but the "
+                                  "Blockstream client ID/secret are not "
+                                  "set; using the public pool instead.")
+                log.warning(self.mode_note)
+        if self.mode == "custom":
             self.api_bases = [self.api_base]
+        elif self.mode == "pool":
+            if self.api_base in known:
+                self.api_bases = [self.api_base] + \
+                    sorted(known - {self.api_base})
+            else:
+                # A non-public base while in pool mode: honour it alone
+                # (legacy behaviour of the endpoint setting).
+                self.api_bases = [self.api_base]
         self._request_count = 0
+
+    # -- Blockstream Explorer API (keyed) authentication ---------------------
+
+    def _ensure_token(self) -> None:
+        """Hold a valid Bearer token for the keyed Blockstream API.
+        Tokens expire after 300 s, so refresh a little early. The token
+        request is authentication, not evidence: it is not custody-logged
+        and the secret never appears in any log."""
+        if time.monotonic() < self._token_expires_at:
+            return
+        try:
+            response = httpx.post(
+                config.BLOCKSTREAM_TOKEN_URL,
+                data={"grant_type": "client_credentials",
+                      "client_id": self.client_id,
+                      "client_secret": self.client_secret},
+                timeout=config.HTTP_TIMEOUT_SECONDS)
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                f"Blockstream Explorer API login failed (network): {exc}")
+        if response.status_code != 200:
+            detail = ""
+            try:
+                detail = response.json().get("error_description") or \
+                    response.json().get("error") or ""
+            except ValueError:
+                pass
+            raise ProviderError(
+                f"Blockstream Explorer API login failed (HTTP "
+                f"{response.status_code}{': ' + detail if detail else ''}). "
+                f"Check the client ID and secret in Settings.")
+        payload = response.json()
+        token = payload.get("access_token")
+        if not token:
+            raise ProviderError("Blockstream Explorer API login returned no "
+                                "access token.")
+        expires_in = int(payload.get("expires_in") or 300)
+        self._client.headers["Authorization"] = f"Bearer {token}"
+        self._token_expires_at = time.monotonic() + min(
+            expires_in - 30, config.BLOCKSTREAM_TOKEN_REFRESH_SECONDS)
 
     # -- raw endpoint wrappers ---------------------------------------------
 
@@ -69,7 +141,12 @@ class BitcoinProvider(ProviderClient):
         host and URL actually used. Rate limits are throttled per host."""
         base = self.api_bases[self._request_count % len(self.api_bases)]
         self._request_count += 1
-        if "blockstream" in base:
+        if self.mode == "keyed":
+            self.provider_name = "blockstream-enterprise"
+            self._ensure_token()
+        elif self.mode == "custom":
+            self.provider_name = "esplora-custom"
+        elif "blockstream" in base:
             self.provider_name = "blockstream.info"
         elif "emzy" in base:
             self.provider_name = "mempool.emzy.de"

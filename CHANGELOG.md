@@ -5,6 +5,66 @@ changes, dependencies, and known limitations, per the project's iteration
 directives. The complete program listing for each version is generated at
 `docs/listings/v{version}-full-listing.txt`.
 
+## v0.14.0 — 2026-09-04 (Data sources: keyed Bitcoin, Alchemy, self-hosted nodes, live rate-limit counters)
+
+### Functionality
+- **Data Sources panel (Settings).** Every data source the tool uses is
+  listed with its chain, what it is used for, its free tier and paid
+  upgrades (figures read from each provider's own pricing/limits page,
+  with the verification date and a link), whether it is configured and
+  which one is ACTIVE, and live counters for this run of the program:
+  live pulls, cache hits, seconds spent waiting on throttles,
+  rate-limited (429) retries, server errors and failures, plus the last
+  error text. Misconfigurations (a keyed mode without credentials) are
+  called out. Each finished trace also carries a per-source pull
+  summary (`data_sources` in the result) shown under the results header
+  - the custody log remains the permanent record.
+- **Bitcoin backends.** New mode setting: *pool* (default, keyless
+  round-robin over mempool.space, blockstream.info and mempool.emzy.de),
+  *keyed* (Blockstream Explorer API at enterprise.blockstream.info -
+  OAuth client-credentials login at login.blockstream.com, Bearer
+  header, tokens refreshed before their 300-second expiry; free tier
+  500,000 requests/month; verified 2026-09-04) and *custom* (one
+  self-hosted Esplora/mempool instance, no external limit). Missing
+  credentials fall back to the pool with a visible note; the token
+  request is not custody-logged and the secret never appears in logs.
+- **Ethereum: Alchemy backend.** With a free Alchemy key (30M compute
+  units/month, 25 requests/s; verified 2026-09-04) the tool uses
+  `alchemy_getAssetTransfers`, which returns external, INTERNAL and
+  ERC-20 transfers with block timestamps in one 120-CU call - internal
+  transactions were previously available only on the keyed Etherscan
+  path. Requests are JSON-RPC POSTs; the custody log records a key-free
+  descriptor (`alchemy://eth-mainnet/<method>?<params>`) that another
+  analyst can replay with their own key. Automatic mode prefers Alchemy,
+  then Etherscan, then keyless Blockscout.
+- **Ethereum: self-hosted Blockscout.** A Blockscout URL setting points
+  the Blockscout mode at an agency-run instance (logged and throttled
+  as `blockscout-custom`).
+- **Paid-tier guidance** in the panel and Settings: Etherscan Lite/
+  Standard/Advanced/Professional ($49/$199/$299/$399 per month),
+  CoinGecko Basic/Analyst ($35/$129), Alchemy pay-as-you-go ($0.45 per
+  1M CU), Blockstream Enterprise ($3,000/month unlimited), Chainabuse
+  partner tier (free for verified agencies). TronGrid's paid plans are
+  priced only inside its console and are linked, not quoted.
+- **HTTP client** gains POST support with the same memo/cache/throttle/
+  retry/custody pipeline, and per-provider counters.
+- **PDF methodology corrected** to describe the v0.13.0 clustering
+  heuristic (the previous text still said no clustering was applied).
+
+### Dependencies
+- Unchanged.
+
+### Known limitations / problems detected
+1. The Alchemy backend was verified against Alchemy's documentation and
+   with mocked responses; Alchemy's public demo key is rate-limited, so
+   no live call was made in this release. The first live use will be by
+   an agency with its own key - report any parsing difference.
+2. The Blockstream keyed backend's login path was exercised live (the
+   token endpoint rejects dummy credentials as expected); data calls
+   need a real client ID/secret.
+3. Session counters reset when the program restarts.
+4. v0.13.0 limitations still apply.
+
 ## v0.13.0 — 2026-09-04 (Wallet intelligence: Chainabuse, flag packs, eth-labels, clustering, summaries, bulk triage)
 
 ### Functionality
