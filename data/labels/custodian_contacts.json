@@ -1,0 +1,221 @@
+{
+  "source_note": "Agency-editable directory of custodian legal-process channels, compiled 2026-08-31 from each custodian's own published law-enforcement guidance (confidence noted per entry). VERIFY THE CHANNEL AT THE CUSTODIAN'S PUBLISHED GUIDELINES URL ON THE DAY OF SERVICE - portals, addresses and requirements change without notice, several custodians reject process sent to the wrong channel, and fake 'law-enforcement contact' emails circulate (see Bybit entry). Fallback when an entity is missing here: the SEARCH.org ISP List at https://www.search.org/resources/isp-list/. For offshore custodians, portals handle VOLUNTARY cooperation and preservation; compelled production formally requires MLAT through the DOJ Office of International Affairs.",
+  "custodians": [
+    {
+      "entity": "Coinbase",
+      "legal_name": "Coinbase, Inc.",
+      "jurisdiction": "United States",
+      "portal": "https://app.kodexglobal.com/gov/signup",
+      "guidelines": "https://help.coinbase.com/en/coinbase/other-topics/legal-policies/who-do-i-contact-for-a-subpoena-request-or-dispute-or-to-send-a-legal-document",
+      "email": "",
+      "process_notes": "Verified 2026-08 (HIGH). All legal process via the Kodex portal (agency-email registration). Preservation requests accepted via portal without formal process. Subpoena -> subscriber/transaction records; court order -> non-content; warrant -> content. Freeze/seizure of funds requires a court order or seizure warrant. Foreign agencies: MLAT."
+    },
+    {
+      "entity": "Binance",
+      "legal_name": "Binance (global platform; see separate Binance.US entry)",
+      "jurisdiction": "Offshore (global platform)",
+      "portal": "https://app.kodexglobal.com/binance/signup",
+      "guidelines": "https://www.binance.com/en/support/law-enforcement",
+      "email": "",
+      "process_notes": "Verified 2026-08 (HIGH). Law Enforcement Request System via Kodex; access approved in ~3 business days. Preservation: 90 days, renewable on request. Records require court order/warrant from a competent jurisdiction; Binance MAY NOTIFY THE USER unless the order prohibits disclosure - request non-disclosure explicitly."
+    },
+    {
+      "entity": "Binance.US",
+      "legal_name": "BAM Trading Services Inc. (Binance.US)",
+      "jurisdiction": "United States",
+      "portal": "",
+      "guidelines": "https://support.binance.us/en/articles/9842980",
+      "email": "LERT@BINANCE.US",
+      "process_notes": "Verified 2026-08 (HIGH). BAM Trading Services Inc., 252 NW 29th St, 10th FL STE 1014, Miami FL 33127. Records: grand-jury subpoena / court order / search warrant / seizure warrant. Freeze: a formal law-enforcement request articulating probable cause can secure an approximately 2-WEEK freeze pending legal process - send it early."
+    },
+    {
+      "entity": "Kraken",
+      "legal_name": "Payward, Inc. (Kraken)",
+      "jurisdiction": "United States",
+      "portal": "https://support.kraken.com/articles/how-do-i-submit-a-legal-inquiry",
+      "guidelines": "https://support.kraken.com/articles/how-do-i-submit-a-legal-inquiry",
+      "email": "",
+      "process_notes": "Verified 2026-08 (MED-HIGH). Submit via the Compliance & Legal inquiry form (not retail support). Distinguishes preservation from production; emergency path exists for imminent harm."
+    },
+    {
+      "entity": "Gemini",
+      "legal_name": "Gemini Trust Company, LLC",
+      "jurisdiction": "United States (NYDFS-regulated trust company)",
+      "portal": "",
+      "guidelines": "https://www.gemini.com/legal",
+      "email": "lawenforcement@gemini.com",
+      "process_notes": "Email found in one Gemini support article (MED confidence - VERIFY before service). 600 Third Ave, 2nd Fl, New York NY 10016. US legal process straightforward."
+    },
+    {
+      "entity": "Crypto.com",
+      "legal_name": "Foris DAX, Inc. (US customers)",
+      "jurisdiction": "United States (US entity) / group entities offshore",
+      "portal": "https://app.kodexglobal.com/gov/signup",
+      "guidelines": "https://help.crypto.com/en/articles/1360625",
+      "email": "",
+      "process_notes": "Verified 2026-08 (HIGH). Legal process via Kodex; ~30-day response target; may redirect foreign agencies to MLAT."
+    },
+    {
+      "entity": "OKX",
+      "legal_name": "Aux Cayes FinTech Co. Ltd. (OKX)",
+      "jurisdiction": "Offshore (Seychelles)",
+      "portal": "https://app.kodexglobal.com/okx/signin",
+      "guidelines": "https://www.okx.com/en-us/help/okx-law-enforcement-request-guide",
+      "email": "enforcement@okx.com (emergencies)",
+      "process_notes": "Verified 2026-08 (HIGH). Wants a signed court order and/or official letterhead with proof of authority; supply wallet addresses and transaction IDs as a CSV attachment. Offshore: expect MLAT for compelled production; the portal handles voluntary cooperation and preservation."
+    },
+    {
+      "entity": "Bybit",
+      "legal_name": "Bybit Fintech Limited",
+      "jurisdiction": "Offshore (BVI; operations Dubai)",
+      "portal": "",
+      "guidelines": "https://www.bybit.com/en/help-center/article/How-to-Report-Stolen-Assets",
+      "email": "",
+      "process_notes": "NO VERIFIED LE CHANNEL as of 2026-08 (LOW confidence). WARNING: an email 'BYBIT159@amail.com' circulating on lookalike sites is a probable PHISHING clone - do not use it. Bybit states its holds are precautionary and not a legal freeze; a police report plus a freezing order from a competent court is expected. Designated NON-COMPLIANT on the agency compliance list; consult counsel on MLAT and move before funds do."
+    },
+    {
+      "entity": "Bitfinex",
+      "legal_name": "iFinex Inc. (Bitfinex)",
+      "jurisdiction": "Offshore (BVI)",
+      "portal": "https://app.kodexglobal.com/gov/signup",
+      "guidelines": "https://www.bitfinex.com/legal/general/law-enforcement-requests-policy/",
+      "email": "",
+      "process_notes": "Processes law-enforcement requests via Kodex (MED confidence, from Kodex's own customer story; Bitfinex's policy page is script-rendered and was not machine-verifiable). BVI entity: MLAT for compelled records."
+    },
+    {
+      "entity": "Bitstamp",
+      "legal_name": "Bitstamp (acquired by Robinhood, 2025)",
+      "jurisdiction": "United States (post-acquisition) / UK / Luxembourg legacy entities",
+      "portal": "",
+      "guidelines": "https://www.bitstamp.net/legal/guidelines-for-law-enforcement-agencies/",
+      "email": "",
+      "process_notes": "STALE-RISK (LOW confidence): now 'Bitstamp by Robinhood' - the channel may have consolidated with Robinhood's (LERequests@robinhood.com). Verify at the guidelines URL before serving."
+    },
+    {
+      "entity": "KuCoin",
+      "legal_name": "MEK Global Limited (KuCoin)",
+      "jurisdiction": "Offshore (Seychelles)",
+      "portal": "https://www.kucoin.com/legal/requests",
+      "guidelines": "https://www.kucoin.com/legal/law-enforcement-request-guidelines",
+      "email": "lawenforcement@kucoin.eu (EU entity)",
+      "process_notes": "Verified 2026-08 (HIGH). Requires signed/sealed official documents (no digital seals), in English. A freeze AUTO-LIFTS AFTER 30 DAYS unless the request specifies a duration - calendar the renewal. MLAT documentation for cross-border compelled production. Exited the US market under its 2025 plea agreement."
+    },
+    {
+      "entity": "Poloniex",
+      "legal_name": "Polo Digital Assets, Ltd.",
+      "jurisdiction": "Offshore (Seychelles)",
+      "portal": "",
+      "guidelines": "https://support.poloniex.com",
+      "email": "",
+      "process_notes": "NO VERIFIED LE CHANNEL as of 2026-08 (LOW confidence). Check the SEARCH.org ISP List and current support pages; expect MLAT."
+    },
+    {
+      "entity": "Cash App",
+      "legal_name": "Block, Inc. (Cash App)",
+      "jurisdiction": "United States",
+      "portal": "https://block.xyz/legal/government",
+      "guidelines": "https://block.xyz/legal/government",
+      "email": "lawenforcement@squareup.com",
+      "process_notes": "Verified 2026-08 (HIGH). Online request form; mail not accepted. Preservation requests accepted; ~60-day minimum response for records; emergency expedite path for imminent threats. Custodies Bitcoin for Cash App users."
+    },
+    {
+      "entity": "PayPal",
+      "legal_name": "PayPal Holdings, Inc. (incl. Venmo)",
+      "jurisdiction": "United States",
+      "portal": "https://safetyhub.paypal.com",
+      "guidelines": "https://safetyhub.paypal.com",
+      "email": "",
+      "process_notes": "Verified 2026-08 (HIGH). Submit via the Safety Hub portal; typed official document with agency logo signed by an authorized officer; ~10 business-day response. PayPal and Venmo crypto balances are custodial."
+    },
+    {
+      "entity": "Robinhood",
+      "legal_name": "Robinhood Markets, Inc. / Robinhood Crypto, LLC",
+      "jurisdiction": "United States",
+      "portal": "",
+      "guidelines": "https://cdn.robinhood.com/assets/robinhood/legal/Law-Enforcement-Request.pdf",
+      "email": "LERequests@robinhood.com (records); accountrestraints@robinhood.com (holds/freezes)",
+      "process_notes": "Verified 2026-08 (HIGH; LE guide dated 2025-11-14). Preservation accepted WITHOUT formal process. Records require subpoena/warrant/court order. Separate address for account restraints - send freeze requests there."
+    },
+    {
+      "entity": "MEXC",
+      "legal_name": "MEXC Global",
+      "jurisdiction": "Offshore (Seychelles)",
+      "portal": "https://www.mexc.com/support/requests/legal",
+      "guidelines": "https://www.mexc.com/support/article/law-enforcement-guidelines-4403594593434",
+      "email": "",
+      "process_notes": "Verified 2026-08 (HIGH). LEORS portal; access review takes 15-20 BUSINESS DAYS - register before you need it. Preservation: 60 days on formal request. Freeze: maximum 30 days unless an order specifies otherwise. Asset return only via court order. English or certified translation."
+    },
+    {
+      "entity": "HTX",
+      "legal_name": "HTX (formerly Huobi)",
+      "jurisdiction": "Offshore",
+      "portal": "",
+      "guidelines": "",
+      "email": "",
+      "process_notes": "NO PUBLIC LE CHANNEL found as of 2026-08 (LOW confidence); historically responded via email. Expect MLAT."
+    },
+    {
+      "entity": "Huobi",
+      "legal_name": "HTX (formerly Huobi)",
+      "jurisdiction": "Offshore",
+      "portal": "",
+      "guidelines": "",
+      "email": "",
+      "process_notes": "See HTX entry (rebranded). NO PUBLIC LE CHANNEL found as of 2026-08 (LOW confidence)."
+    },
+    {
+      "entity": "Tether",
+      "legal_name": "Tether Operations Limited (USDT issuer)",
+      "jurisdiction": "Offshore (BVI / El Salvador registration)",
+      "portal": "",
+      "guidelines": "https://tether.to/en/law-enforcement",
+      "email": "lawenforcement@tether.to",
+      "process_notes": "TOKEN ISSUER, not an exchange: Tether can freeze/blacklist USDT at ANY address - including self-custodied wallets - at the token-contract level, and has done so repeatedly on law-enforcement request. Email cited in Tether's published law-enforcement guidance (MED-HIGH confidence - verify at the guidelines URL). Request should identify the address, the USDT amounts and transactions, and the investigating agency; a court order strengthens but is not always required for an initial freeze."
+    },
+    {
+      "entity": "Circle",
+      "legal_name": "Circle Internet Financial, LLC (USDC issuer)",
+      "jurisdiction": "United States",
+      "portal": "",
+      "guidelines": "https://www.circle.com/en/legal/law-enforcement-request-policy",
+      "email": "lawenforcement@circle.com",
+      "process_notes": "TOKEN ISSUER: Circle can blacklist USDC at any address at the contract level. US company - responsive to US legal process; publishes a law-enforcement request policy (verify the current channel there; email MED confidence). Formal legal process expected for records; freezes typically require court order or clear exigency."
+    },
+    {
+      "entity": "Bitcoin Depot",
+      "legal_name": "Bitcoin Depot Inc. (crypto ATM/kiosk operator)",
+      "jurisdiction": "United States (NASDAQ: BTM)",
+      "portal": "",
+      "guidelines": "https://bitcoindepot.com/support/",
+      "email": "",
+      "process_notes": "KIOSK OPERATOR (largest US network): holds KYC (phone number, often ID scans), kiosk location, and transaction records for cash-to-crypto purchases. Serve US legal process on the corporate entity; check its site/SEARCH.org for the current legal contact (LOW-MED confidence - verify). Victim kiosk receipts identify the operator and transaction."
+    },
+    {
+      "entity": "CoinFlip",
+      "legal_name": "GPD Holdings, LLC d/b/a CoinFlip (crypto ATM operator)",
+      "jurisdiction": "United States",
+      "portal": "",
+      "guidelines": "https://coinflip.tech/support",
+      "email": "",
+      "process_notes": "KIOSK OPERATOR: KYC, kiosk location and transaction records available to US legal process. Verify the current legal-process contact on its site or the SEARCH.org ISP List (LOW-MED confidence)."
+    },
+    {
+      "entity": "Athena Bitcoin",
+      "legal_name": "Athena Bitcoin Global (crypto ATM operator)",
+      "jurisdiction": "United States / Latin America",
+      "portal": "",
+      "guidelines": "https://athenabitcoin.com/",
+      "email": "",
+      "process_notes": "KIOSK OPERATOR: US legal process for KYC/transaction records; verify the current legal contact on its site or SEARCH.org (LOW confidence)."
+    },
+    {
+      "entity": "Gate",
+      "legal_name": "Gate.io (Gate Technology)",
+      "jurisdiction": "Offshore",
+      "portal": "",
+      "guidelines": "https://www.gate.com/legal/law-enforcement",
+      "email": "regulatory@gate.com",
+      "process_notes": "MED confidence (guide page blocks automated verification). Email from an official government domain, in English, attaching a stamped/signed court order, subpoena, warrant or official letter."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "_comment": "Agency compliance designations for exchanges, referenced to FATF (Financial Action Task Force) guidance. EDIT THIS FILE to add or change designations - matching is by entity name, case-insensitive. IMPORTANT: FATF rates jurisdictions, not individual exchanges; this list is the investigating agency's own designation and is always presented as such, never as an official FATF publication.",
+  "source_note": "Designation assigned by the investigating agency with reference to FATF (Financial Action Task Force) guidance and the agency's experience serving legal process. This is not an official FATF publication (FATF evaluates jurisdictions, not individual businesses). The designation list is stored locally at data/labels/exchange_compliance.json and may be edited by the agency.",
+  "designations": [
+    { "entity": "Kraken",   "status": "compliant", "note": "" },
+    { "entity": "Bithoven", "status": "compliant", "note": "bithoven.com; based in St. Vincent and the Grenadines" },
+    { "entity": "Gemini",   "status": "compliant", "note": "" },
+    { "entity": "Poloniex", "status": "compliant", "note": "" },
+    { "entity": "Coinbase", "status": "compliant", "note": "" },
+    { "entity": "Bittrex",  "status": "compliant", "note": "" },
+    { "entity": "Uniswap",  "status": "compliant", "note": "decentralized protocol; legal process is typically directed to Uniswap Labs" },
+    { "entity": "Binance",  "status": "compliant", "note": "" },
+    { "entity": "Bybit",    "status": "non_compliant", "note": "" },
+    { "entity": "Bitfinex", "status": "non_compliant", "note": "" },
+    { "entity": "BitMEX",   "status": "non_compliant", "note": "" },
+    { "entity": "FTX",      "status": "non_compliant", "note": "ceased operations 2022; claims go through the bankruptcy estate" }
+  ]
+}

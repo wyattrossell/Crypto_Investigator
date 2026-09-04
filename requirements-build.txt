@@ -1,0 +1,6 @@
+# Crypto Investigator - extra dependencies for BUILDING the Windows release
+# (not needed to run the program). See tools/build_release.py.
+#
+#   python -m pip install -r requirements.txt -r requirements-build.txt
+
+pyinstaller==6.22.2     # freezes the program into dist/CryptoInvestigator/

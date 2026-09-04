@@ -1,0 +1,12 @@
+# Crypto Investigator - Python dependencies (run from source)
+#
+# Kept deliberately minimal so the tool is easy to audit and to deploy
+# on an evidence-handling workstation.
+
+fastapi==0.115.6        # HTTP API framework (serves both the JSON API and the UI)
+uvicorn==0.34.0         # ASGI server that runs the FastAPI app on localhost
+httpx==0.28.1           # HTTP client used for all block-explorer API calls
+reportlab==4.2.5        # PDF generation for the court-ready report
+pyyaml==6.0.2           # parses GraphSense TagPack label files (exchange attribution)
+pystray==0.19.5         # notification-area (system tray) icon for the console-free launcher
+pillow==12.2.0          # tray icon image + tools/make_icon.py

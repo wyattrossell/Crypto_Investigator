@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build output (regenerate with tools/build_release.py)
+build/
+dist/
+
+# CASE DATA - never commit. The database holds real investigations,
+# reports are court documents, logs may contain wallet addresses.
+data/investigator.db
+data/investigator.db-shm
+data/investigator.db-wal
+data/investigator.db-journal
+data/reports/
+data/logs/
+data-location.txt
+
+# Local conveniences
+*.lnk
+.claude/
+Thumbs.db
+desktop.ini

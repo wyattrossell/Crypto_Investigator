@@ -1,0 +1,26 @@
+Crypto Investigator - before you install
+
+WHAT THIS INSTALLS
+  A local program that runs entirely on this computer. It opens in your
+  web browser at http://127.0.0.1:8321 and is not reachable from the
+  network. A small icon in the notification area (system tray) shows it
+  is running; right-click that icon to reopen the browser tab or to quit.
+
+WHERE YOUR DATA GOES
+  Cases, traces, reports, logs and the editable label files are stored in
+    %LOCALAPPDATA%\CryptoInvestigator\data
+  (one folder per Windows user). Upgrading or uninstalling the program
+  never deletes that folder. To keep evidence on another drive, see the
+  setup guide (README) for the data-location.txt option.
+
+NO ACCOUNTS REQUIRED
+  Bitcoin, Ethereum and Tron tracing and USD pricing work out of the box
+  on free public APIs. Optional API keys (Settings) raise rate limits.
+
+INTERNET ACCESS
+  The program needs outbound HTTPS to public block explorers, the U.S.
+  Treasury (OFAC list) and GitHub (label packs). Nothing is uploaded; the
+  only outbound data are the wallet addresses and transaction IDs being
+  looked up, which are public on the blockchain already. If your agency
+  enables the optional AI assistant, trace data is sent to the AI provider
+  you configure - that feature is off by default.
