@@ -156,6 +156,8 @@ def meta():
         "data_dir": str(config.DATA_DIR),
         "installed_build": config.FROZEN,
         "can_shutdown": shutdown_hook is not None,
+        "letterhead_configured": bool(database.get_setting("agency_name")),
+        "ai_configured": bool(database.get_setting("ai_provider")),
     }
 
 
@@ -490,6 +492,36 @@ class AnnotationSave(BaseModel):
     address: str = Field(min_length=8)
     chain: str
     note: str = ""      # empty note deletes the annotation
+
+
+@app.get("/api/cases/{case_id}/traces")
+def case_traces(case_id: int):
+    """Trace history for a case (newest first) so the UI can reopen an
+    earlier trace instead of only showing the one just run."""
+    if database.get_case(case_id) is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+    rows = database.list_traces_for_case(case_id)
+    for row in rows:
+        trace = database.get_trace(row["id"])
+        params = json.loads(trace.get("params_json") or "{}")
+        row["direction"] = params.get("direction", "forward")
+        row["extended"] = bool(params.get("extended"))
+        row["search_pattern"] = params.get("search_pattern", "")
+        row["focus_txid"] = params.get("focus_txid", "")
+        result = trace.get("result_json")
+        summary = {}
+        if result:
+            try:
+                parsed = json.loads(result)
+                summary = {
+                    "exits": len(parsed.get("exits", [])),
+                    "findings": len(parsed.get("findings", [])),
+                    "addresses": len(parsed.get("nodes", [])),
+                }
+            except (ValueError, TypeError):
+                summary = {}
+        row["summary"] = summary
+    return rows
 
 
 @app.get("/api/cases/{case_id}/annotations")

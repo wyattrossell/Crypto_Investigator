@@ -10,24 +10,28 @@
 <body>
 
 <header>
-  <div>
+  <div class="brand">
+    <img src="/icon.png" alt="">
     <h1>Crypto Investigator</h1>
     <span id="version-badge" class="badge"></span>
   </div>
-  <div class="header-right">
+  <nav class="header-right">
     <span id="price-ticker" class="ticker" title="Live prices from CoinGecko,
 refreshed every minute. Context only — trace reports value each movement at
 its own transaction date."></span>
-    <span id="label-status" class="muted"></span>
-    <button id="btn-watches" class="secondary">👁 Watches<span
+    <span id="label-status" class="muted" title="Label lists loaded"></span>
+    <button id="btn-watches" class="ghost">👁 Watches<span
       id="watch-alert-badge" class="alert-badge hidden"></span></button>
-    <button id="btn-flags" class="secondary">🚩 Flags</button>
-    <button id="btn-custodians" class="secondary">📇 Legal contacts</button>
-    <button id="btn-ic3" class="secondary">IC3 helper</button>
-    <button id="btn-settings" class="secondary">Settings</button>
-    <button id="btn-quit" class="secondary hidden"
+    <button id="btn-flags" class="ghost">🚩 Flags</button>
+    <button id="btn-custodians" class="ghost">📇 Legal contacts</button>
+    <button id="btn-ic3" class="ghost">IC3 helper</button>
+    <span class="nav-sep"></span>
+    <button id="btn-settings" class="ghost">⚙ Settings</button>
+    <button id="btn-theme" class="ghost icon" title="Switch light / dark theme"
+      aria-label="Switch theme">◐</button>
+    <button id="btn-quit" class="ghost danger hidden"
       title="Stop the program (it keeps running in the background until you do)">Quit</button>
-  </div>
+  </nav>
 </header>
 
 <main>
@@ -35,7 +39,7 @@ its own transaction date."></span>
   <aside id="workflow">
 
     <section class="step">
-      <h2>Step 1 — Case</h2>
+      <h2><span class="step-num">1</span>Case</h2>
       <p class="hint">Every trace is saved to a case so your work is
         reproducible and reportable.</p>
       <select id="case-select"></select>
@@ -57,13 +61,16 @@ notes, linked flags/watches) as one file for transfer or backup.">Export
         <button id="btn-case-import" class="secondary small"
           title="Import a case exported from this tool (possibly on another
 machine).">Import case…</button>
+        <button id="btn-history" class="secondary small"
+          title="Reopen an earlier trace of this case">🕘 Trace
+          history</button>
         <input type="file" id="case-import-file" accept=".json"
           class="hidden">
       </div>
     </section>
 
     <section class="step">
-      <h2>Step 2 — Victim wallet</h2>
+      <h2><span class="step-num">2</span>Victim wallet</h2>
       <p class="hint">Paste the victim's wallet address — the wallet the
         stolen or scammed funds left from.</p>
       <textarea id="victim-input" rows="2"
@@ -93,7 +100,7 @@ machine).">Import case…</button>
     </section>
 
     <section class="step">
-      <h2>Step 3 — Which payment? <span class="optional">(optional)</span></h2>
+      <h2><span class="step-num">3</span>Which payment? <span class="optional">(optional)</span></h2>
       <p class="hint">Not every transaction on a victim's wallet needs
         investigating. Paste the transaction hash of the payment to the
         scammer: only that payment is followed, its recipient becomes the
@@ -107,7 +114,7 @@ machine).">Import case…</button>
     </section>
 
     <section class="step">
-      <h2>Step 4 — Search pattern</h2>
+      <h2><span class="step-num">4</span>Search pattern</h2>
       <label class="pattern-option">
         <input type="radio" name="search-pattern" value="rapid">
         <b>Rapid — follow the bulk.</b>
@@ -133,7 +140,7 @@ machine).">Import case…</button>
     </section>
 
     <section class="step">
-      <h2>Step 5 — How far to follow</h2>
+      <h2><span class="step-num">5</span>How far to follow</h2>
       <div id="extended-option">
         <label class="check"><input type="checkbox" id="extended-mode">
           <b>Extended:</b> keep following until every branch resolves
@@ -168,17 +175,19 @@ machine).">Import case…</button>
       </details>
     </section>
 
-    <button id="btn-trace" class="primary">Follow the money</button>
+    <button id="btn-trace" class="primary">Follow the money →</button>
     <div id="trace-status" class="hidden"></div>
   </aside>
 
   <!-- ============ RIGHT: results ============ -->
   <section id="results" class="hidden">
+    <div id="results-head"></div>
     <div id="disposition"></div>
     <div id="findings"></div>
     <div id="exit-summary"></div>
     <div id="warnings"></div>
 
+    <section class="card graph-card">
     <div class="graph-header">
       <h2>Money-flow map</h2>
       <div id="legend">
@@ -224,7 +233,10 @@ machine).">Import case…</button>
     </div>
     <div id="graph"></div>
     <div id="node-details" class="hidden"></div>
+    </section>
 
+    <section class="card downloads-card">
+    <h2>Exports</h2>
     <div class="downloads">
       <a id="dl-evidence" class="button" target="_blank"
         title="One ZIP with the report, custody log, raw data, affidavit
@@ -240,8 +252,9 @@ search-warrant affidavit — counsel to adapt.">Affidavit draft (TXT)</a>
         title="Save the money-flow map as a print-resolution image for use
 as a warrant or courtroom exhibit.">Map image (PNG)</button>
     </div>
+    </section>
 
-    <div id="ai-panel" class="hidden">
+    <div id="ai-panel" class="card hidden">
       <h2>🤖 AI assistant</h2>
       <div class="ai-banner">AI-generated content is investigative
         <b>assistance, not evidence</b>. Verify every claim against the
@@ -273,17 +286,55 @@ prioritise and why?)"></textarea>
   </section>
 
   <section id="results-empty">
-    <h2>No trace yet</h2>
-    <p class="muted">Create or pick a case, paste the victim's wallet
-      address (and, if you know it, the hash of the payment to the
-      scammer), and press <b>Follow the money</b>.</p>
-    <p class="muted">What this tool does: follows stolen funds across the
-      public blockchain until they reach a business (usually a crypto
-      exchange) that can be served with a subpoena or warrant for the account
-      holder’s identity. It never guesses — anything that is an inference
-      rather than an on-chain fact is labelled with its confidence.</p>
+    <div class="empty-hero">
+      <img src="/icon.png" alt="">
+      <div>
+        <h2>Follow the money to where legal process can be served</h2>
+        <p>This tool follows stolen or scammed funds across the public
+          blockchain until they reach a business (usually a crypto exchange)
+          that can be served with a subpoena, warrant or freeze request for
+          the account holder's identity. It never guesses: anything that is
+          an inference rather than an on-chain fact is labelled with its
+          confidence and basis, and every data pull is recorded for court.</p>
+        <div class="how-steps">
+          <div class="how-step"><b><span class="step-num">1</span>Pick or
+            create a case</b>Every trace is saved to a case so the work is
+            reproducible and reportable.</div>
+          <div class="how-step"><b><span class="step-num">2</span>Paste the
+            victim's wallet</b>Add the payment's transaction hash if you know
+            it, so only that payment is followed.</div>
+          <div class="how-step"><b><span class="step-num">3</span>Follow the
+            money</b>Review findings and the map, then export the evidence
+            package, freeze letters and IC3 worksheet.</div>
+        </div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <h2>Getting started</h2>
+        <p class="hint">One-time setup. Everything works without accounts;
+          these downloads make attribution far stronger.</p>
+        <ul id="getting-started" class="checklist"></ul>
+      </div>
+      <div class="card">
+        <h2>Recent traces in this case</h2>
+        <div id="recent-traces" class="history-list"></div>
+      </div>
+    </div>
   </section>
 </main>
+
+<!-- ============ Trace history dialog ============ -->
+<dialog id="history-dialog">
+  <h2>🕘 Trace history</h2>
+  <p class="hint" id="history-note">Every trace run in this case, newest
+    first. Open a finished trace to review its findings, map and exports
+    again.</p>
+  <div id="history-list" class="history-list"></div>
+  <div class="dialog-buttons">
+    <button id="btn-history-close" class="secondary">Close</button>
+  </div>
+</dialog>
 
 <!-- ============ Settings dialog ============ -->
 <dialog id="settings-dialog">

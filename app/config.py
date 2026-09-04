@@ -14,7 +14,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 APP_NAME = "Crypto Investigator"
-APP_VERSION = "0.11.0"
+APP_VERSION = "0.12.0"
 
 # The tool binds to localhost ONLY. Evidence must not be exposed on a network
 # interface without a deliberate deployment decision (Phase 3+).

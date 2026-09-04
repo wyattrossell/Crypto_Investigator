@@ -11,16 +11,21 @@
 // How often to poll a running trace, in milliseconds.
 const TRACE_POLL_INTERVAL_MS = 1500;
 
-// Node colours must match the CSS legend.
+// Node colours must match the CSS legend tokens in style.css.
 const ROLE_COLORS = {
-  victim: "#1857b8",
+  victim: "#1f5fd0",
   intermediary: "#8195a8",
   exchange: "#1e8a4c",
   sanctioned: "#c22525",
-  mixer: "#5b2333",
+  mixer: "#6b2a3f",
   contract: "#7a3fa8",
   high_activity_service: "#d97a06",
-  unexpanded: "#c3ccd6",
+  unexpanded: "#b9c4cf",
+};
+// Overrides for the dark theme (only where the light colour reads poorly).
+const ROLE_COLORS_DARK = {
+  intermediary: "#7f93a6",
+  unexpanded: "#4d5b6a",
 };
 
 // Plain-language explanations shown when a node is clicked.
@@ -43,6 +48,50 @@ const ROLE_EXPLANATIONS = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+/* ===================== theme (light / dark) ===================== */
+
+const THEME_KEY = "ci-theme";
+
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.dataset.theme = theme;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+  const btn = $("btn-theme");
+  if (btn) btn.textContent = currentTheme() === "dark" ? "☀" : "☾";
+  if (typeof cy !== "undefined" && cy) redrawGraph();
+}
+
+/** Effective theme after the stored choice and the OS preference. */
+function currentTheme() {
+  const set = document.documentElement.dataset.theme;
+  if (set) return set;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark" : "light";
+}
+
+function initTheme() {
+  let theme = null;
+  const fromUrl = new URLSearchParams(location.search).get("theme");
+  if (fromUrl === "light" || fromUrl === "dark") theme = fromUrl;
+  if (!theme) { try { theme = localStorage.getItem(THEME_KEY); } catch (_) {} }
+  applyTheme(theme);
+  window.matchMedia("(prefers-color-scheme: dark)")
+    .addEventListener("change", () => applyTheme(
+      document.documentElement.dataset.theme || null));
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch (_) {}
+  applyTheme(next);
+}
+
+/** Read a CSS custom property so canvas drawing matches the theme. */
+const cssVar = (name) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** JSON fetch helper that surfaces API error details. */
 async function api(path, options = {}) {
@@ -82,13 +131,20 @@ async function refreshMeta() {
   const exchangeCount = (meta.labels_loaded.seed_community || 0) +
     (meta.labels_loaded.graphsense_tagpack || 0);
   const scamCount = meta.labels_loaded.scamsniffer || 0;
-  $("label-status").textContent =
-    `Labels: ${exchangeCount.toLocaleString()} exchange/mixer · ` +
-    `${ofacCount.toLocaleString()} OFAC · ` +
-    `${scamCount.toLocaleString()} scam-list · ` +
-    `${meta.flags_count || 0} flagged` +
-    (ofacCount === 0 ? " — download lists in Settings!" : "");
+  const compact = (n) => n >= 10000 ? `${Math.round(n / 1000)}k`
+    : n.toLocaleString();
+  const status = $("label-status");
+  status.textContent = ofacCount === 0
+    ? "No label lists yet — download them in Settings"
+    : `${compact(exchangeCount)} exchange · ${compact(ofacCount)} OFAC · ` +
+      `${compact(scamCount)} scam · ${meta.flags_count || 0} flagged`;
+  status.title =
+    `Labels loaded: ${exchangeCount.toLocaleString()} exchange/mixer, ` +
+    `${ofacCount.toLocaleString()} OFAC sanctioned, ` +
+    `${scamCount.toLocaleString()} scam-list, ` +
+    `${meta.flags_count || 0} flagged by this agency`;
   const badge = $("watch-alert-badge");
+  renderGettingStarted(meta);
   if (meta.watch_alerts > 0) {
     badge.textContent = String(meta.watch_alerts);
     badge.classList.remove("hidden");
@@ -96,6 +152,116 @@ async function refreshMeta() {
     badge.classList.add("hidden");
   }
   return meta;
+}
+
+/* ===================== getting-started checklist ===================== */
+
+function renderGettingStarted(meta) {
+  const list = $("getting-started");
+  if (!list) return;
+  const fresh = meta.labels_freshness || {};
+  const items = [
+    ["ofac_sdn" in fresh, "OFAC sanctions list downloaded",
+     "Official US Treasury list; flags sanctioned wallets at HIGH confidence."],
+    ["graphsense_tagpack" in fresh, "Exchange label packs downloaded",
+     "Hundreds of thousands of exchange and mixer addresses (GraphSense)."],
+    ["scamsniffer" in fresh, "Scam blacklist downloaded",
+     "Reported drainer and phishing addresses (ScamSniffer)."],
+    [!!meta.letterhead_configured, "Agency letterhead filled in",
+     "Used on DRAFT freeze / preservation request letters."],
+  ];
+  const done = items.filter((i) => i[0]).length;
+  list.innerHTML = items.map(([ok, title, why]) => `
+    <li><span class="check-icon${ok ? " done" : ""}">${ok ? "✓" : "·"}</span>
+      <span>${title}${ok ? "" : ` — <a href="#" data-open-settings>open
+        Settings</a>`}<span class="muted">${why}</span></span></li>`).join("");
+  list.querySelectorAll("[data-open-settings]").forEach((a) =>
+    a.addEventListener("click", (ev) => { ev.preventDefault(); openSettings(); }));
+  if (done === items.length) {
+    list.insertAdjacentHTML("beforeend",
+      "<li><span class='check-icon done'>✓</span><span>All set. Optional " +
+      "API keys in Settings raise rate limits for busy traces.</span></li>");
+  }
+}
+
+/* ===================== trace history ===================== */
+
+let traceHistory = [];
+
+async function loadTraceHistory() {
+  const caseId = Number($("case-select").value);
+  traceHistory = caseId ? await api(`/api/cases/${caseId}/traces`) : [];
+  renderHistoryInto($("recent-traces"), traceHistory.slice(0, 6),
+    "No traces in this case yet.");
+  return traceHistory;
+}
+
+function describeTrace(t) {
+  const chain = t.chain.charAt(0).toUpperCase() + t.chain.slice(1);
+  const bits = [chain, t.direction === "backward" ? "source of funds" :
+    "follow the money"];
+  if (t.extended) bits.push("extended");
+  else if (t.search_pattern) bits.push(t.search_pattern);
+  return bits.join(" · ");
+}
+
+function renderHistoryInto(container, rows, emptyText) {
+  if (!container) return;
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted">${emptyText}</p>`;
+    return;
+  }
+  container.innerHTML = rows.map((t) => {
+    const s = t.summary || {};
+    const stats = t.status === "finished"
+      ? `${s.exits ?? 0} exit${s.exits === 1 ? "" : "s"} · ` +
+        `${s.findings ?? 0} finding${s.findings === 1 ? "" : "s"} · ` +
+        `${s.addresses ?? 0} addresses`
+      : (t.status === "failed" ? "failed" : t.status);
+    const when = (t.started_utc || "").replace("T", " ").slice(0, 16) + " UTC";
+    const action = t.status === "finished"
+      ? `<button class="secondary small" data-open-trace="${t.id}">Open</button>`
+      : (t.status === "running" || t.status === "queued"
+        ? `<button class="secondary small" data-open-trace="${t.id}">Watch</button>`
+        : "");
+    return `<div class="history-row ${t.status}">
+      <div>#${t.id} <code>${shortAddress(t.start_input)}</code>
+        <span class="muted">${describeTrace(t)} · ${when} · ${stats}</span></div>
+      <div>${action}</div></div>`;
+  }).join("");
+  container.querySelectorAll("[data-open-trace]").forEach((btn) =>
+    btn.addEventListener("click", () => openTrace(Number(btn.dataset.openTrace))));
+}
+
+async function openHistory() {
+  const rows = await loadTraceHistory();
+  renderHistoryInto($("history-list"), rows,
+    "No traces in this case yet. Run one from the panel on the left.");
+  $("history-dialog").showModal();
+}
+
+/** Reopen a trace by id: finished traces render immediately; running
+    ones are polled like a fresh submission. */
+async function openTrace(traceId) {
+  const dialog = $("history-dialog");
+  if (dialog.open) dialog.close();
+  let trace;
+  try {
+    trace = await api(`/api/traces/${traceId}`);
+  } catch (error) {
+    alert(`Could not load trace #${traceId}: ${error.message}`);
+    return;
+  }
+  if (trace.status === "finished" && trace.result) {
+    $("trace-status").classList.add("hidden");
+    renderResults(traceId, trace.result, trace);
+  } else if (trace.status === "running" || trace.status === "queued") {
+    $("trace-status").classList.remove("hidden", "failed", "done");
+    $("trace-status").textContent = "Reconnecting to the running trace…";
+    pollTrace(traceId);
+  } else {
+    alert(`Trace #${traceId} ${trace.status}: ${trace.error || ""}`);
+  }
 }
 
 /* ===================== wallet flags ===================== */
@@ -493,7 +659,7 @@ async function startTrace() {
   }
 
   $("btn-trace").disabled = true;
-  $("trace-status").classList.remove("hidden", "failed");
+  $("trace-status").classList.remove("hidden", "failed", "done");
   $("trace-status").textContent = "Submitting trace…";
 
   try {
@@ -541,19 +707,55 @@ function pollTrace(traceId) {
       return;
     }
     $("trace-status").textContent = "Trace finished.";
-    renderResults(traceId, trace.result);
+    $("trace-status").classList.add("done");
+    renderResults(traceId, trace.result, trace);
+    loadTraceHistory();
   }, TRACE_POLL_INTERVAL_MS);
+}
+
+function renderResultsHead(traceId, result, traceRow) {
+  const head = $("results-head");
+  if (!head) return;
+  const chain = result.chain.charAt(0).toUpperCase() + result.chain.slice(1);
+  const backward = result.direction === "backward";
+  const chips = [
+    `<span class="chip">${chain}</span>`,
+    `<span class="chip">${backward ? "Source of funds" : "Follow the money"}</span>`,
+  ];
+  let params = result.params || {};
+  if (traceRow && traceRow.params_json) {
+    try { params = JSON.parse(traceRow.params_json); } catch (_) {}
+  }
+  if (params.extended) chips.push(`<span class="chip">Extended</span>`);
+  else if (params.search_pattern) chips.push(
+    `<span class="chip">${params.search_pattern}</span>`);
+  if (params.focus_txid) chips.push(`<span class="chip">Focus transaction</span>`);
+  const finished = traceRow && traceRow.finished_utc
+    ? traceRow.finished_utc.replace("T", " ").slice(0, 16) + " UTC" : "";
+  if (finished) chips.push(`<span class="chip">Finished ${finished}</span>`);
+  const exits = (result.exits || []).length;
+  chips.push(`<span class="chip ${exits ? "ok" : ""}">${exits} exit point${
+    exits === 1 ? "" : "s"}</span>`);
+  const start = result.victim_address || result.start_input || "";
+  head.innerHTML = `<h2>Trace #${traceId} <span class="muted">from</span>
+      <code>${shortAddress(start)}</code></h2>
+    <div class="meta">${chips.join("")}</div>`;
 }
 
 /* ===================== results rendering ===================== */
 
 let currentTraceId = null;
 
-function renderResults(traceId, result) {
+function renderResults(traceId, result, traceRow) {
   currentTraceId = traceId;
   currentResult = result;   // needed before exits render (freeze links)
   $("results-empty").classList.add("hidden");
   $("results").classList.remove("hidden");
+  renderResultsHead(traceId, result, traceRow);
+  if (String(location.hash) !== `#trace=${traceId}`) {
+    history.replaceState(null, "", `#trace=${traceId}`);
+  }
+  $("results").scrollTop = 0;
 
   refreshAnnotations();
   renderDisposition(result);
@@ -637,9 +839,17 @@ function renderFindings(result) {
     container.append(div);
     return;
   }
-  for (const finding of findings) {
+  // Long lists (extended traces can produce dozens) start collapsed so the
+  // exit points and map stay within reach; nothing is hidden from exports.
+  const FINDINGS_INITIAL = 8;
+  const hiddenCards = [];
+  findings.forEach((finding, index) => {
     const card = document.createElement("div");
     card.className = `finding-card p${finding.priority}`;
+    if (index >= FINDINGS_INITIAL) {
+      card.classList.add("hidden");
+      hiddenCards.push(card);
+    }
     const links = (finding.addresses || []).slice(0, 2).map((address) => {
       return `<a href="${explorerFor(result.chain, address)}"
            target="_blank">explorer</a> ·
@@ -687,6 +897,24 @@ function renderFindings(result) {
       card.append(actions);
     }
     container.append(card);
+  });
+  if (hiddenCards.length) {
+    const more = document.createElement("div");
+    more.className = "findings-more";
+    const btn = document.createElement("button");
+    btn.className = "secondary small";
+    btn.textContent = `Show all ${findings.length} findings ` +
+      `(${hiddenCards.length} more)`;
+    btn.addEventListener("click", () => {
+      const collapsed = hiddenCards[0].classList.contains("hidden");
+      hiddenCards.forEach((c) => c.classList.toggle("hidden", !collapsed));
+      btn.textContent = collapsed
+        ? `Show only the top ${FINDINGS_INITIAL}`
+        : `Show all ${findings.length} findings (${hiddenCards.length} more)`;
+      if (!collapsed) container.scrollIntoView({ behavior: "smooth" });
+    });
+    more.append(btn);
+    container.append(more);
   }
 }
 
@@ -1197,15 +1425,24 @@ function redrawGraph() {
   }
 
   if (cy) cy.destroy();
+  const dark = currentTheme() === "dark";
+  const inkColor = cssVar("--ink") || "#16202a";
+  const surface = cssVar("--surface-2") || "#ffffff";
+  const edgeColor = dark ? "#5c6d80" : "#9fb0c1";
+  const chainColor = dark ? "#8a9bae" : "#7d8ea0";
+  const stubColor = dark ? "#46556a" : "#b8c3ce";
+  const nodeColor = (role) => (dark && ROLE_COLORS_DARK[role]) ||
+    ROLE_COLORS[role] || "#999";
   cy = cytoscape({
     container: $("graph"),
     elements,
     style: [
       { selector: "node", style: {
-        "background-color": (el) => ROLE_COLORS[el.data("role")] || "#999",
+        "background-color": (el) => nodeColor(el.data("role")),
         label: "data(label)", "text-wrap": "wrap", "font-size": 9,
+        color: inkColor,
         "text-valign": "bottom", "text-margin-y": 4, width: 26, height: 26,
-        "border-width": 2, "border-color": "#ffffff",
+        "border-width": 2, "border-color": surface,
       }},
       { selector: "node[role='exchange']", style: { width: 38, height: 38 }},
       { selector: "node[role='victim']", style: { width: 34, height: 34 }},
@@ -1216,18 +1453,19 @@ function redrawGraph() {
       { selector: "edge", style: {
         width: 3, "curve-style": "bezier",
         "target-arrow-shape": "triangle", "arrow-scale": 1.1,
-        "line-color": "#9fb0c1", "target-arrow-color": "#9fb0c1",
+        "line-color": edgeColor, "target-arrow-color": edgeColor,
         label: "data(label)", "font-size": 8, "text-rotation": "autorotate",
-        "text-background-color": "#ffffff", "text-background-opacity": 0.85,
+        color: inkColor,
+        "text-background-color": surface, "text-background-opacity": 0.85,
         "text-background-padding": 2,
       }},
       { selector: "edge[kind='chain']", style: {
-        "line-style": "dashed", "line-color": "#7d8ea0",
-        "target-arrow-color": "#7d8ea0",
+        "line-style": "dashed", "line-color": chainColor,
+        "target-arrow-color": chainColor,
       }},
       { selector: "edge[kind='stubEdge']", style: {
-        "line-style": "dotted", "line-color": "#b8c3ce",
-        "target-arrow-color": "#b8c3ce",
+        "line-style": "dotted", "line-color": stubColor,
+        "target-arrow-color": stubColor,
       }},
       { selector: "node[flagged = 1]", style: {
         "border-color": "#c22525", "border-width": 4,
@@ -1237,7 +1475,7 @@ function redrawGraph() {
         "border-style": "double",
       }},
       { selector: ":selected", style: {
-        "border-color": "#1857b8", "border-width": 3,
+        "border-color": dark ? "#5b95f0" : "#1f5fd0", "border-width": 3,
       }},
     ],
     layout: { name: "preset", fit: true, padding: 30 },
@@ -2188,8 +2426,15 @@ async function refreshOfac() {
 /* ===================== wiring ===================== */
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   refreshMeta();
-  refreshCases().then(updateCaseTools);
+  refreshCases().then(() => {
+    updateCaseTools();
+    loadTraceHistory();
+    // Reopen the trace named in the URL (#trace=ID) after a reload.
+    const match = /^#trace=(\d+)$/.exec(location.hash);
+    if (match) openTrace(Number(match[1]));
+  });
   refreshFlags();
   refreshWatches();
   refreshAiStatus();
@@ -2248,7 +2493,14 @@ document.addEventListener("DOMContentLoaded", () => {
       caseId ? `/api/cases/${caseId}/export.json` : "#";
     refreshAnnotations();
   }
-  $("case-select").addEventListener("change", updateCaseTools);
+  $("case-select").addEventListener("change", () => {
+    updateCaseTools();
+    loadTraceHistory();
+  });
+  $("btn-history").addEventListener("click", openHistory);
+  $("btn-history-close").addEventListener("click",
+    () => $("history-dialog").close());
+  $("btn-theme").addEventListener("click", toggleTheme);
 
   // Watched wallets dialog
   $("btn-watches").addEventListener("click", openWatches);

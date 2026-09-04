@@ -5,6 +5,52 @@ changes, dependencies, and known limitations, per the project's iteration
 directives. The complete program listing for each version is generated at
 `docs/listings/v{version}-full-listing.txt`.
 
+## v0.12.0 — 2026-09-04 (Web UI modernisation)
+
+### Functionality
+- **Visual redesign of the browser UI** on the same guided workflow the
+  investigator already knows (numbered steps, results on the right).
+  A token-based design system (`style.css`): card layout, consistent
+  buttons/inputs/dialogs/tables, brand mark in the header, chips and
+  status badges, spinner while a trace runs, focus rings for keyboard
+  use, and a responsive single-column layout below ~960 px.
+- **Dark theme.** Follows the Windows/OS preference by default; a header
+  toggle (☾/☀) overrides it and the choice is remembered on that
+  machine. The money-flow map re-colours its labels, edges and borders
+  to match the theme (role colours are unchanged so the legend, PDF
+  and map stay consistent).
+- **Trace history.** Traces could previously only be viewed in the
+  session that ran them. New endpoint `GET /api/cases/{id}/traces`
+  (newest first, with exits/findings/address counts) drives a
+  "Recent traces in this case" list on the start screen, a 🕘 Trace
+  history dialog in Step 1, and `#trace=<id>` in the URL so a browser
+  reload (or a bookmark) reopens the same trace. A running trace can be
+  re-attached to the same way.
+- **Results header** shows the trace number, starting wallet, chain,
+  direction, pattern/extended, focus-transaction flag, finish time and
+  exit-point count at a glance.
+- **Findings list starts collapsed** at the top 8 (extended traces can
+  produce dozens), with "Show all N findings"; exit points and the map
+  are no longer pushed off-screen. Exports are unaffected.
+- **Getting-started checklist** on the start screen: OFAC list, exchange
+  label packs, scam blacklist and agency letterhead, each with a link
+  into Settings until done (`/api/meta` now reports letterhead and AI
+  configuration state).
+- Exports grouped in their own card; header nav de-emphasised (ghost
+  buttons) with a compact label-inventory summary (full counts in the
+  tooltip).
+
+### Dependencies
+- Unchanged.
+
+### Known limitations / problems detected
+1. The theme toggle is per browser profile (localStorage), not per
+   agency setting.
+2. Very large maps (hundreds of addresses) still use the simple preset
+   layout and can render sparse until "Recenter" or "Tighten" is used;
+   layout algorithms are unchanged in this release.
+3. v0.11.0 limitations still apply.
+
 ## v0.11.0 — 2026-09-04 (Console-free launcher, Windows installer, per-user data folder)
 
 First release built for handing to OTHER agencies.
