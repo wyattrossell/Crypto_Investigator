@@ -20,11 +20,16 @@ program listing, and the validation documents. Do them in this order.
 6. **Build**: `python tools/build_release.py` → `dist/` holds the portable
    zip and, with Inno Setup installed, the setup executable. Sign the
    executables if the agency has a certificate.
-7. **Publish**: `gh release create v<version> dist/*.zip dist/*.exe
+7. **Bundle for agencies**: `python tools/make_distribution.py` →
+   `dist/CryptoInvestigator-v<version>-distribution.zip`, one folder with
+   the installer, the portable build, both guides, the validation PDFs,
+   the changelog, a README-FIRST and SHA256SUMS. This is the file you
+   send.
+8. **Publish**: `gh release create v<version> dist/*.zip dist/*.exe
    --title "Crypto Investigator v<version>" --notes-file <notes>` (or the
    GitHub web UI). Paste the changelog section as the notes and list the
    SHA-256 of each artefact (`certutil -hashfile <file> SHA256`).
-8. **Tell the agencies**: what changed, whether the data folder or keys
+9. **Tell the agencies**: what changed, whether the data folder or keys
    need attention, and the artefact hashes.
 
 Never include `data/investigator.db`, `data/reports` or `data/logs` in
